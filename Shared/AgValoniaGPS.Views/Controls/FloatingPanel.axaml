@@ -1,0 +1,108 @@
+﻿<!--
+AgValoniaGPS
+Copyright (C) 2024-2025 AgValoniaGPS Contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:AgValoniaGPS.Views.Localization;assembly=AgValoniaGPS.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:AgValoniaGPS.ViewModels"
+             mc:Ignorable="d"
+             x:Class="AgValoniaGPS.Views.Controls.FloatingPanel">
+
+    <UserControl.Styles>
+        <Style Selector="Border.FloatingPanel">
+            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
+        <Style Selector="Button.ModernButton">
+            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseLowBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <Style Selector="Button.ModernButton:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseMediumLowBrush}"/>
+        </Style>
+
+      <Style Selector="Button.MenuButton">
+        <Setter Property="Template">
+          <ControlTemplate>
+            <Button Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+                    BorderThickness="0"
+                    CornerRadius="6"
+                    HorizontalAlignment="Stretch"
+                    Height="44"
+                    Margin="0,2"
+                    Cursor="Hand"
+                    Command="{TemplateBinding Command}"
+                    IsEnabled="{TemplateBinding IsEnabled}">
+              <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False" Margin="8,0">
+                <Image Source="{Binding Path=Tag, RelativeSource={RelativeSource TemplatedParent}}"
+                       Width="28"
+                       Height="28"/>
+                <TextBlock Text="{TemplateBinding Content}"
+                           VerticalAlignment="Center"
+                           FontSize="12"/>
+              </StackPanel>
+            </Button>
+          </ControlTemplate>
+        </Setter>
+      </Style>
+
+      <Style Selector="Border.FloatingPanel">
+        <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Padding" Value="8"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+      </Style>
+    </UserControl.Styles>
+
+    <!-- Main Floating Panel with built-in Drag Handle -->
+    <Border Classes="FloatingPanel">
+      <StackPanel Spacing="4">
+        <Grid x:Name="DragHandle" ColumnDefinitions="Auto,*,Auto" Height="32"
+              Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+
+          <TextBlock Grid.Column="0" Text="=" VerticalAlignment="Center" Margin="8,0" IsHitTestVisible="False"/>
+
+          <TextBlock Grid.Column="1"
+                     Text="{Binding Title, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                     FontWeight="Bold"
+                     VerticalAlignment="Center"
+                     IsHitTestVisible="False"/>
+
+          <Button Grid.Column="2" Content="X"
+                  Command="{Binding CloseCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  Background="Transparent"/>
+        </Grid>
+
+        <Separator Height="1" Background="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
+
+        <ContentPresenter Content="{Binding Content, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+      </StackPanel>
+    </Border>
+</UserControl>

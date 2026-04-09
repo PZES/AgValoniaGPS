@@ -21,152 +21,102 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:AgValoniaGPS.ViewModels"
+             xmlns:panels="clr-namespace:AgValoniaGPS.Views.Controls;assembly=AgValoniaGPS.Views"
              mc:Ignorable="d"
              x:Class="AgValoniaGPS.Views.Controls.Panels.JobMenuPanel"
              x:DataType="vm:MainViewModel"
              IsVisible="{Binding IsJobMenuPanelVisible}"
              IsHitTestVisible="{Binding IsJobMenuPanelVisible}">
 
-    <UserControl.Styles>
-        <Style Selector="Border.FloatingPanel">
-            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
-            <Setter Property="CornerRadius" Value="12"/>
-            <Setter Property="Padding" Value="8"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-        </Style>
-        <Style Selector="Button.ModernButton">
-            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseLowBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="8,6"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
-        <Style Selector="Button.ModernButton:pointerover">
-            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseMediumLowBrush}"/>
-        </Style>
-    </UserControl.Styles>
+    <panels:FloatingPanel Title="{loc:Localize StartNewField}"
+                          CloseCommand="{Binding ToggleJobMenuPanelCommand}"
+                          MinWidth="400">
+        <Border Classes="FloatingPanel" MinWidth="400" IsVisible="{Binding IsJobMenuPanelVisible}" IsHitTestVisible="True">
+            <StackPanel Spacing="4" Background="Transparent">
+                <Grid x:Name="DragHandle" ColumnDefinitions="Auto,*,Auto" Height="32" Margin="0,0,0,8"
+                      Background="{DynamicResource SystemControlBackgroundAltHighBrush}" Cursor="Hand" ToolTip.Tip="Drag to move">
+                    <TextBlock Grid.Column="0" Text="=" Foreground="{DynamicResource SystemControlForegroundBaseLowBrush}" FontSize="20" FontWeight="Bold"
+                               VerticalAlignment="Center" Margin="8,0,8,0" IsHitTestVisible="False"/>
+                    <TextBlock Grid.Column="1" Text="{loc:Localize StartNewField}" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" FontSize="16" FontWeight="Bold"
+                               VerticalAlignment="Center" IsHitTestVisible="False"/>
+                    <Button Grid.Column="2" Content="X" Width="24" Height="24" Padding="0" BorderThickness="0"
+                            Background="Transparent" Foreground="{DynamicResource SystemControlForegroundBaseLowBrush}" FontSize="16" Cursor="Hand"
+                            Command="{Binding ToggleJobMenuPanelCommand}" Margin="8,0,8,0"/>
+                </Grid>
 
-    <Border Classes="FloatingPanel" MinWidth="400" IsVisible="{Binding IsJobMenuPanelVisible}" IsHitTestVisible="True">
-        <StackPanel Spacing="4" Background="Transparent">
-            <Grid x:Name="DragHandle" ColumnDefinitions="Auto,*,Auto" Height="32" Margin="0,0,0,8"
-                  Background="{DynamicResource SystemControlBackgroundAltHighBrush}" Cursor="Hand" ToolTip.Tip="Drag to move">
-                <TextBlock Grid.Column="0" Text="=" Foreground="{DynamicResource SystemControlForegroundBaseLowBrush}" FontSize="20" FontWeight="Bold"
-                           VerticalAlignment="Center" Margin="8,0,8,0" IsHitTestVisible="False"/>
-                <TextBlock Grid.Column="1" Text="{loc:Localize StartNewField}" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" FontSize="16" FontWeight="Bold"
-                           VerticalAlignment="Center" IsHitTestVisible="False"/>
-                <Button Grid.Column="2" Content="X" Width="24" Height="24" Padding="0" BorderThickness="0"
-                        Background="Transparent" Foreground="{DynamicResource SystemControlForegroundBaseLowBrush}" FontSize="16" Cursor="Hand"
-                        Command="{Binding ToggleJobMenuPanelCommand}" Margin="8,0,8,0"/>
-            </Grid>
+                <Separator Height="1" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Margin="0,0,0,4"/>
 
-            <Separator Height="1" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Margin="0,0,0,4"/>
+                <!-- Menu Items: 2-column layout (6 rows x 2 columns) -->
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="4" Background="Transparent">
+                  <Button Grid.Row="0" Grid.Column="0" Classes="MenuButton"
+                          Content="{loc:Localize IsoXml}"
+                          Tag="avares://AgValoniaGPS.Views/Assets/Icons/ISOXML.png"
+                          Command="{Binding ShowIsoXmlImportDialogCommand}"/>
 
-            <!-- Menu Items: 2-column layout (6 rows x 2 columns) -->
-            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="4" Background="Transparent">
-                <!-- Row 0: ISO-XML, Close -->
-                <Button Grid.Column="0" Grid.Row="0" Classes="ModernButton" HorizontalAlignment="Stretch" Margin="0,2" Height="44"
-                        ClickMode="Press" Command="{Binding ShowIsoXmlImportDialogCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False">
-                        <Image Source="avares://AgValoniaGPS.Views/Assets/Icons/ISOXML.png" Width="28" Height="28"/>
-                        <TextBlock Text="{loc:Localize IsoXml}" VerticalAlignment="Center" FontSize="12"/>
-                    </StackPanel>
-                </Button>
-                <Button Grid.Column="1" Grid.Row="0" Classes="ModernButton" HorizontalAlignment="Stretch" Margin="0,2" Height="44"
-                        ClickMode="Press" Command="{Binding CloseFieldCommand}"
-                        IsEnabled="{Binding IsFieldOpen}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False">
-                        <Image Source="avares://AgValoniaGPS.Views/Assets/Icons/FileClose.png" Width="28" Height="28"/>
-                        <TextBlock Text="{loc:Localize Close}" VerticalAlignment="Center" FontSize="12"/>
-                    </StackPanel>
-                </Button>
+                  <Button Grid.Row="0" Grid.Column="1" Classes="MenuButton"
+                          Content="{loc:Localize Close}"
+                          Tag="avares://AgValoniaGPS.Views/Assets/Icons/FileClose.png"
+                          Command="{Binding CloseFieldCommand}"
+                          IsEnabled="{Binding IsFieldOpen}"/>
 
-                <!-- Row 1: From KML, Drive In -->
-                <Button Grid.Column="0" Grid.Row="1" Classes="ModernButton" HorizontalAlignment="Stretch" Margin="0,2" Height="44"
-                        ClickMode="Press" Command="{Binding ShowKmlImportDialogCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False">
-                        <Image Source="avares://AgValoniaGPS.Views/Assets/Icons/GoogleEarth.png" Width="28" Height="28"/>
-                        <TextBlock Text="{loc:Localize FromKml}" VerticalAlignment="Center" FontSize="12"/>
-                    </StackPanel>
-                </Button>
-                <Button Grid.Column="1" Grid.Row="1" Classes="ModernButton" HorizontalAlignment="Stretch" Margin="0,2" Height="44"
-                        ClickMode="Press" Command="{Binding DriveInCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False">
-                        <Image Source="avares://AgValoniaGPS.Views/Assets/Icons/SteerDriveOn.png" Width="28" Height="28"/>
-                        <TextBlock Text="{loc:Localize DriveIn}" VerticalAlignment="Center" FontSize="12"/>
-                    </StackPanel>
-                </Button>
+                  <Button Grid.Row="1" Grid.Column="0" Classes="MenuButton"
+                          Content="{loc:Localize FromKml}"
+                          Tag="avares://AgValoniaGPS.Views/Assets/Icons/GoogleEarth.png"
+                          Command="{Binding ShowKmlImportDialogCommand}"/>
 
-                <!-- Row 2: From Existing, Open -->
-                <Button Grid.Column="0" Grid.Row="2" Classes="ModernButton" HorizontalAlignment="Stretch" Margin="0,2" Height="44"
-                        ClickMode="Press" Command="{Binding ShowFromExistingFieldDialogCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False">
-                        <Image Source="avares://AgValoniaGPS.Views/Assets/Icons/FileExisting.png" Width="28" Height="28"/>
-                        <TextBlock Text="{loc:Localize FromExisting}" VerticalAlignment="Center" FontSize="12"/>
-                    </StackPanel>
-                </Button>
-                <Button Grid.Column="1" Grid.Row="2" Classes="ModernButton" HorizontalAlignment="Stretch" Margin="0,2" Height="44"
-                        ClickMode="Press" Command="{Binding ShowFieldSelectionDialogCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False">
-                        <Image Source="avares://AgValoniaGPS.Views/Assets/Icons/FileOpen.png" Width="28" Height="28"/>
-                        <TextBlock Text="{loc:Localize Open}" VerticalAlignment="Center" FontSize="12"/>
-                    </StackPanel>
-                </Button>
+                  <Button Grid.Row="1" Grid.Column="1" Classes="MenuButton"
+                          Content="{loc:Localize DriveIn}"
+                          Tag="avares://AgValoniaGPS.Views/Assets/Icons/SteerDriveOn.png"
+                          Command="{Binding DriveInCommand}"/>
 
-                <!-- Row 3: New From Default, Resume -->
-                <Button Grid.Column="0" Grid.Row="3" Classes="ModernButton" HorizontalAlignment="Stretch" Margin="0,2" Height="44"
-                        ClickMode="Press" Command="{Binding ShowNewFieldDialogCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False">
-                        <Image Source="avares://AgValoniaGPS.Views/Assets/Icons/FileNew.png" Width="28" Height="28"/>
-                        <TextBlock Text="{loc:Localize NewFromDefault}" VerticalAlignment="Center" FontSize="12"/>
-                    </StackPanel>
-                </Button>
-                <Button Grid.Column="1" Grid.Row="3" Classes="ModernButton" HorizontalAlignment="Stretch" Margin="0,2" Height="44"
-                        ClickMode="Press" Command="{Binding ResumeFieldCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False">
-                        <Image Source="avares://AgValoniaGPS.Views/Assets/Icons/FilePrevious.png" Width="28" Height="28"/>
-                        <TextBlock Text="{loc:Localize Resume}" VerticalAlignment="Center" FontSize="12"/>
-                    </StackPanel>
-                </Button>
+                  <Button Grid.Row="2" Grid.Column="0" Classes="MenuButton"
+                          Content="{loc:Localize FromExisting}"
+                          Tag="avares://AgValoniaGPS.Views/Assets/Icons/FileExisting.png"
+                          Command="{Binding ShowFromExistingFieldDialogCommand}"/>
 
-                <!-- Row 4: AgShare Download, AgShare Upload -->
-                <Button Grid.Column="0" Grid.Row="4" Classes="ModernButton" HorizontalAlignment="Stretch" Margin="0,2" Height="44"
-                        ClickMode="Press" Command="{Binding ShowAgShareDownloadDialogCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False">
-                        <Image Source="avares://AgValoniaGPS.Views/Assets/Icons/AgShare.png" Width="28" Height="28"/>
-                        <TextBlock Text="{loc:Localize AgShareDownload}" VerticalAlignment="Center" FontSize="12"/>
-                    </StackPanel>
-                </Button>
-                <Button Grid.Column="1" Grid.Row="4" Classes="ModernButton" HorizontalAlignment="Stretch" Margin="0,2" Height="44"
-                        ClickMode="Press" Command="{Binding ShowAgShareUploadDialogCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False">
-                        <Image Source="avares://AgValoniaGPS.Views/Assets/Icons/AgShare.png" Width="28" Height="28"/>
-                        <TextBlock Text="{loc:Localize AgShareUpload}" VerticalAlignment="Center" FontSize="12"/>
-                    </StackPanel>
-                </Button>
+                  <Button Grid.Row="2" Grid.Column="1" Classes="MenuButton"
+                          Content="{loc:Localize Open}"
+                          Tag="avares://AgValoniaGPS.Views/Assets/Icons/FileOpen.png"
+                          Command="{Binding ShowFieldSelectionDialogCommand}"/>
 
-                <!-- Row 5: Offset Fix -->
-                <Button Grid.Column="0" Grid.Row="5" Classes="ModernButton" HorizontalAlignment="Stretch" Margin="0,2" Height="44"
-                        ClickMode="Press" Command="{Binding ShowOffsetFixDialogCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" IsHitTestVisible="False">
-                        <Image Source="avares://AgValoniaGPS.Views/Assets/Icons/YouTurnReverse.png" Width="28" Height="28"/>
-                        <TextBlock Text="{loc:Localize OffsetFix}" VerticalAlignment="Center" FontSize="12"/>
-                    </StackPanel>
-                </Button>
-            </Grid>
+                  <Button Grid.Row="3" Grid.Column="0" Classes="MenuButton"
+                          Content="{loc:Localize NewFromDefault}"
+                          Tag="avares://AgValoniaGPS.Views/Assets/Icons/FileNew.png"
+                          Command="{Binding ShowNewFieldDialogCommand}"/>
 
-            <!-- Current Field Display -->
-            <Border Background="#DD1E8449" CornerRadius="6" Padding="8,4" Margin="0,8,0,0"
-                    IsVisible="{Binding IsFieldOpen}">
-                <TextBlock Text="{Binding CurrentFieldName, StringFormat='Current Field: {0}'}"
-                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
-                           FontSize="13"
-                           FontWeight="SemiBold"
-                           TextWrapping="Wrap"
-                           HorizontalAlignment="Center"/>
-            </Border>
-        </StackPanel>
-    </Border>
+                  <Button Grid.Row="3" Grid.Column="1" Classes="MenuButton"
+                          Content="{loc:Localize Resume}"
+                          Tag="avares://AgValoniaGPS.Views/Assets/Icons/FilePrevious.png"
+                          Command="{Binding ResumeFieldCommand}"/>
+
+                  <Button Grid.Row="4" Grid.Column="0" Classes="MenuButton"
+                          Content="{loc:Localize AgShareDownload}"
+                          Tag="avares://AgValoniaGPS.Views/Assets/Icons/AgShare.png"
+                          Command="{Binding ShowAgShareDownloadDialogCommand}"/>
+
+                  <Button Grid.Row="4" Grid.Column="1" Classes="MenuButton"
+                          Content="{loc:Localize AgShareUpload}"
+                          Tag="avares://AgValoniaGPS.Views/Assets/Icons/AgShare.png"
+                          Command="{Binding ShowAgShareUploadDialogCommand}"/>
+
+                  <Button Grid.Row="5" Grid.Column="0" Classes="MenuButton"
+                          Content="{loc:Localize OffsetFix}"
+                          Tag="avares://AgValoniaGPS.Views/Assets/Icons/YouTurnReverse.png"
+                          Command="{Binding ShowOffsetFixDialogCommand}"/>
+                </Grid>
+
+                <!-- Current Field Display -->
+                <Border Background="#DD1E8449" CornerRadius="6" Padding="8,4" Margin="0,8,0,0"
+                        IsVisible="{Binding IsFieldOpen}">
+                    <TextBlock Text="{Binding CurrentFieldName, StringFormat='Current Field: {0}'}"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"
+                               HorizontalAlignment="Center"/>
+                </Border>
+            </StackPanel>
+        </Border>
+    </panels:FloatingPanel>
+
 </UserControl>

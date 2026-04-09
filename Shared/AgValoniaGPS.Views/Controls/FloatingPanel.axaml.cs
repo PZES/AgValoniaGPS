@@ -1,4 +1,4 @@
-// AgValoniaGPS
+﻿// AgValoniaGPS
 // Copyright (C) 2024-2025 AgValoniaGPS Contributors
 //
 // This program is free software: you can redistribute it and/or modify
@@ -15,13 +15,14 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 using System;
+using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 
-namespace AgValoniaGPS.Views.Controls.Panels;
+namespace AgValoniaGPS.Views.Controls;
 
-public partial class JobMenuPanel : UserControl
+public partial class FloatingPanel : UserControl
 {
     private bool _isDragging = false;
     private Point _lastScreenPoint;
@@ -30,9 +31,45 @@ public partial class JobMenuPanel : UserControl
     public event EventHandler<Vector>? DragMoved;
     public event EventHandler<PointerReleasedEventArgs>? DragEnded;
 
-    public JobMenuPanel()
+    public FloatingPanel()
     {
         InitializeComponent();
+        // Find the DragHandle inside the FloatingPanel
+        Loaded += (s, e) => AttachDragHandler();
+    }
+
+    // Title Property
+    public static readonly StyledProperty<string> TitleProperty =
+        AvaloniaProperty.Register<FloatingPanel, string>(nameof(Title), "Untitled");
+
+    public string Title
+    {
+        get => GetValue(TitleProperty);
+        set => SetValue(TitleProperty, value);
+    }
+
+    // Close Command Property
+    public static readonly StyledProperty<ICommand> CloseCommandProperty =
+        AvaloniaProperty.Register<FloatingPanel, ICommand>(nameof(CloseCommand));
+
+    public ICommand CloseCommand
+    {
+        get => GetValue(CloseCommandProperty);
+        set => SetValue(CloseCommandProperty, value);
+    }
+
+    // Min Width
+    public static readonly StyledProperty<double> MinWidthProperty =
+        AvaloniaProperty.Register<FloatingPanel, double>(nameof(MinWidth), 400);
+
+    public double MinWidth
+    {
+        get => GetValue(MinWidthProperty);
+        set => SetValue(MinWidthProperty, value);
+    }
+
+    private void AttachDragHandler()
+    {
         var dragHandle = this.FindControl<Grid>("DragHandle");
         if (dragHandle != null)
         {
@@ -44,7 +81,6 @@ public partial class JobMenuPanel : UserControl
 
     private void DragHandle_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        Console.WriteLine("ioipiopiopiopopi");
         if (sender is Grid handle)
         {
             var root = this.VisualRoot as Visual;
@@ -55,18 +91,19 @@ public partial class JobMenuPanel : UserControl
 
     private void DragHandle_PointerMoved(object? sender, PointerEventArgs e)
     {
-        Console.WriteLine("xczzxcczxzxczcxzcx");
         if (sender is Grid handle && e.Pointer.Captured == handle)
         {
             var root = this.VisualRoot as Visual;
             var currentPoint = root != null ? e.GetPosition(root) : e.GetPosition(this);
             var distance = Math.Sqrt(Math.Pow(currentPoint.X - _lastScreenPoint.X, 2) +
                                     Math.Pow(currentPoint.Y - _lastScreenPoint.Y, 2));
+
             if (!_isDragging && distance > 5.0)
             {
                 _isDragging = true;
                 DragStarted?.Invoke(this, null!);
             }
+
             if (_isDragging)
             {
                 var delta = currentPoint - _lastScreenPoint;
@@ -81,7 +118,9 @@ public partial class JobMenuPanel : UserControl
     {
         if (sender is Grid handle && e.Pointer.Captured == handle)
         {
-            if (_isDragging) DragEnded?.Invoke(this, e);
+            if (_isDragging)
+                DragEnded?.Invoke(this, e);
+
             _isDragging = false;
             e.Pointer.Capture(null);
             e.Handled = true;
