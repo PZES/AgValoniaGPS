@@ -83,6 +83,10 @@ public class CoverageMapService : ICoverageMapService
     private bool _fieldBoundsSet;
 
     // ========== TRACKING STATE ==========
+    // Thread-safety lock — coverage methods may be called from background thread
+    // (simulator tick) while UI thread reads state via events
+    private readonly object _coverageLock = new();
+
     // Track which sections are actively mapping
     private readonly HashSet<int> _activeSections = new();
 
@@ -131,31 +135,36 @@ public class CoverageMapService : ICoverageMapService
 
     public void StartMapping(int zoneIndex, Vec2 leftEdge, Vec2 rightEdge, CoverageColor? color = null)
     {
-        // If already mapping this zone, just continue
-        if (_activeSections.Contains(zoneIndex))
-            return;
+        lock (_coverageLock)
+        {
+            if (_activeSections.Contains(zoneIndex))
+                return;
 
-        _activeSections.Add(zoneIndex);
-
-        // Store initial edge for area calculation and bitmap rasterization
-        _lastEdgesPerSection[zoneIndex] = (
-            (leftEdge.Easting, leftEdge.Northing),
-            (rightEdge.Easting, rightEdge.Northing));
+            _activeSections.Add(zoneIndex);
+            _lastEdgesPerSection[zoneIndex] = (
+                (leftEdge.Easting, leftEdge.Northing),
+                (rightEdge.Easting, rightEdge.Northing));
+        }
     }
 
     public void StopMapping(int zoneIndex)
     {
-        if (!_activeSections.Contains(zoneIndex))
-            return;
+        lock (_coverageLock)
+        {
+            if (!_activeSections.Contains(zoneIndex))
+                return;
 
-        _activeSections.Remove(zoneIndex);
-        _lastEdgesPerSection.Remove(zoneIndex);
+            _activeSections.Remove(zoneIndex);
+            _lastEdgesPerSection.Remove(zoneIndex);
+        }
     }
 
     public event EventHandler<BoundsExpandedEventArgs>? BoundsExpanded;
 
     public void AddCoveragePoint(int zoneIndex, Vec2 leftEdge, Vec2 rightEdge)
     {
+        lock (_coverageLock)
+        {
         if (!_activeSections.Contains(zoneIndex))
             return;
 
@@ -193,6 +202,7 @@ public class CoverageMapService : ICoverageMapService
         _lastEdgesPerSection[zoneIndex] = (
             (leftEdge.Easting, leftEdge.Northing),
             (rightEdge.Easting, rightEdge.Northing));
+        } // lock
     }
 
     /// <summary>
@@ -309,22 +319,29 @@ public class CoverageMapService : ICoverageMapService
     /// </summary>
     public void FlushCoverageUpdate()
     {
-        if (!_coverageDirty) return;
-
-        CoverageUpdated?.Invoke(this, new CoverageUpdatedEventArgs
+        CoverageUpdatedEventArgs? args = null;
+        lock (_coverageLock)
         {
-            TotalArea = _totalWorkedArea,
-            PatchCount = (int)GetTotalCellCount(),
-            AreaAdded = _pendingAreaAdded
-        });
+            if (!_coverageDirty) return;
+            args = new CoverageUpdatedEventArgs
+            {
+                TotalArea = _totalWorkedArea,
+                PatchCount = (int)GetTotalCellCount(),
+                AreaAdded = _pendingAreaAdded
+            };
+            _coverageDirty = false;
+            _pendingAreaAdded = 0;
+        } // lock
 
-        _coverageDirty = false;
-        _pendingAreaAdded = 0;
+        // Fire event outside lock to avoid deadlocks
+        if (args != null)
+            CoverageUpdated?.Invoke(this, args);
     }
 
     public bool IsZoneMapping(int zoneIndex)
     {
-        return _activeSections.Contains(zoneIndex);
+        lock (_coverageLock)
+            return _activeSections.Contains(zoneIndex);
     }
 
     public bool IsPointCovered(double easting, double northing)
@@ -603,53 +620,52 @@ public class CoverageMapService : ICoverageMapService
     /// </summary>
     public IEnumerable<(int CellX, int CellY, CoverageColor Color)> GetNewCoverageBitmapCells(double cellSize)
     {
-        if (_newCells.Count == 0)
-            return Array.Empty<(int, int, CoverageColor)>();
-
-        // Determine origin for coordinate calculations
-        double minE, minN;
-        if (_fieldBoundsSet)
+        lock (_coverageLock)
         {
-            // Use fixed field bounds (stable coordinate system)
-            minE = _fieldMinE;
-            minN = _fieldMinN;
-        }
-        else
-        {
-            // Fall back to coverage bounds (can drift)
-            if (!_boundsValid)
-            {
-                _newCells.Clear();
+            if (_newCells.Count == 0)
                 return Array.Empty<(int, int, CoverageColor)>();
-            }
-            minE = _minCellE * BITMAP_CELL_SIZE;
-            minN = _minCellN * BITMAP_CELL_SIZE;
-        }
 
-        // Reuse buffers to avoid allocations (clear first)
-        _newCellsDedup.Clear();
-        _newCellsResult.Clear();
-
-        // Convert each new cell to the requested cell size
-        foreach (var (cellE, cellN, zone) in _newCells)
-        {
-            double worldE = (cellE + 0.5) * BITMAP_CELL_SIZE;
-            double worldN = (cellN + 0.5) * BITMAP_CELL_SIZE;
-
-            int outCellX = (int)Math.Floor((worldE - minE) / cellSize);
-            int outCellY = (int)Math.Floor((worldN - minN) / cellSize);
-
-            if (_newCellsDedup.Add((outCellX, outCellY)))
+            // Determine origin for coordinate calculations
+            double minE, minN;
+            if (_fieldBoundsSet)
             {
-                var color = GetZoneColor(zone);
-                _newCellsResult.Add((outCellX, outCellY, color));
+                minE = _fieldMinE;
+                minN = _fieldMinN;
             }
+            else
+            {
+                if (!_boundsValid)
+                {
+                    _newCells.Clear();
+                    return Array.Empty<(int, int, CoverageColor)>();
+                }
+                minE = _minCellE * BITMAP_CELL_SIZE;
+                minN = _minCellN * BITMAP_CELL_SIZE;
+            }
+
+            _newCellsDedup.Clear();
+            _newCellsResult.Clear();
+
+            foreach (var (cellE, cellN, zone) in _newCells)
+            {
+                double worldE = (cellE + 0.5) * BITMAP_CELL_SIZE;
+                double worldN = (cellN + 0.5) * BITMAP_CELL_SIZE;
+
+                int outCellX = (int)Math.Floor((worldE - minE) / cellSize);
+                int outCellY = (int)Math.Floor((worldN - minN) / cellSize);
+
+                if (_newCellsDedup.Add((outCellX, outCellY)))
+                {
+                    var color = GetZoneColor(zone);
+                    _newCellsResult.Add((outCellX, outCellY, color));
+                }
+            }
+
+            _newCells.Clear();
+
+            // Return a copy since _newCellsResult is reused
+            return _newCellsResult.ToArray();
         }
-
-        // Clear source cells
-        _newCells.Clear();
-
-        return _newCellsResult;
     }
 
     public IReadOnlyList<CoveragePatch> GetPatches()
@@ -856,6 +872,12 @@ public class CoverageMapService : ICoverageMapService
         // Load section display (colors with palette, resolution-independent)
         bool hasSectionDisplay = LoadSectionDisplay(fieldDirectory);
 
+        // Fallback: try legacy AgOpenGPS Sections.txt format
+        if (!hasDetectionBits && !hasSectionDisplay)
+        {
+            hasDetectionBits = LoadLegacySections(fieldDirectory);
+        }
+
         if (hasSectionDisplay || hasDetectionBits)
         {
             Console.WriteLine($"[Coverage] Loaded: detectionBits={hasDetectionBits}, sectionDisplay={hasSectionDisplay}");
@@ -868,6 +890,125 @@ public class CoverageMapService : ICoverageMapService
                 PixelsAlreadyLoaded = hasSectionDisplay  // Only skip repaint if we loaded display data
             });
         }
+    }
+
+    /// <summary>
+    /// Load legacy AgOpenGPS Sections.txt coverage data.
+    /// Format: quad strips with vertex pairs (easting, northing, 0).
+    /// Rasterizes the quads into our coverage cell grid.
+    /// </summary>
+    private bool LoadLegacySections(string fieldDirectory)
+    {
+        var path = Path.Combine(fieldDirectory, "Sections.txt");
+        if (!File.Exists(path)) return false;
+
+        try
+        {
+            var lines = File.ReadAllLines(path);
+            int lineIdx = 0;
+            int totalCells = 0;
+
+            while (lineIdx < lines.Length)
+            {
+                // Read count (number of lines in this strip: 1 color + pairs*2)
+                var countLine = lines[lineIdx++].Trim();
+                if (string.IsNullOrEmpty(countLine)) continue;
+                if (!int.TryParse(countLine, out int n) || n < 3) continue;
+
+                int nPairs = (n - 1) / 2;
+
+                // Read RGB color line (R,G,B format)
+                if (lineIdx >= lines.Length) break;
+                var colorParts = lines[lineIdx++].Split(',');
+                // We ignore the color and use default coverage color
+
+                // Read vertex pairs and rasterize each quad
+                double prevLeftE = 0, prevLeftN = 0, prevRightE = 0, prevRightN = 0;
+                bool hasPrev = false;
+
+                for (int i = 0; i < nPairs; i++)
+                {
+                    if (lineIdx + 1 >= lines.Length) break;
+
+                    var leftParts = lines[lineIdx++].Split(',');
+                    var rightParts = lines[lineIdx++].Split(',');
+
+                    if (leftParts.Length < 2 || rightParts.Length < 2) continue;
+
+                    double leftE = double.Parse(leftParts[0].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+                    double leftN = double.Parse(leftParts[1].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+                    double rightE = double.Parse(rightParts[0].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+                    double rightN = double.Parse(rightParts[1].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+
+                    if (hasPrev)
+                    {
+                        // Rasterize quad: prevLeft -> prevRight -> currRight -> currLeft (CW winding)
+                        totalCells += RasterizeQuad(
+                            prevLeftE, prevLeftN, prevRightE, prevRightN,
+                            rightE, rightN, leftE, leftN);
+                    }
+
+                    prevLeftE = leftE; prevLeftN = leftN;
+                    prevRightE = rightE; prevRightN = rightN;
+                    hasPrev = true;
+                }
+            }
+
+            if (totalCells > 0)
+            {
+                Console.WriteLine($"[Coverage] Loaded legacy Sections.txt: {totalCells} cells rasterized");
+                return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Coverage] Error loading legacy Sections.txt: {ex.Message}");
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Rasterize a quad (4 vertices) into coverage cells.
+    /// Uses the same cell grid and point-in-quad test as RasterizeQuadToBitmap.
+    /// </summary>
+    private int RasterizeQuad(
+        double e0, double n0, double e1, double n1,
+        double e2, double n2, double e3, double n3)
+    {
+        var p0 = (E: e0, N: n0);
+        var p1 = (E: e1, N: n1);
+        var p2 = (E: e2, N: n2);
+        var p3 = (E: e3, N: n3);
+
+        double minE = Math.Min(Math.Min(e0, e1), Math.Min(e2, e3));
+        double maxE = Math.Max(Math.Max(e0, e1), Math.Max(e2, e3));
+        double minN = Math.Min(Math.Min(n0, n1), Math.Min(n2, n3));
+        double maxN = Math.Max(Math.Max(n0, n1), Math.Max(n2, n3));
+
+        int cellMinE = (int)Math.Floor(minE / BITMAP_CELL_SIZE);
+        int cellMaxE = (int)Math.Floor(maxE / BITMAP_CELL_SIZE);
+        int cellMinN = (int)Math.Floor(minN / BITMAP_CELL_SIZE);
+        int cellMaxN = (int)Math.Floor(maxN / BITMAP_CELL_SIZE);
+
+        int count = 0;
+        for (int ce = cellMinE; ce <= cellMaxE; ce++)
+        {
+            for (int cn = cellMinN; cn <= cellMaxN; cn++)
+            {
+                double cellCenterE = (ce + 0.5) * BITMAP_CELL_SIZE;
+                double cellCenterN = (cn + 0.5) * BITMAP_CELL_SIZE;
+
+                if (IsPointInQuad(cellCenterE, cellCenterN, p0, p1, p2, p3))
+                {
+                    if (MarkCellCovered(ce, cn, 0))
+                    {
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
     }
 
     /// <summary>

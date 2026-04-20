@@ -17,35 +17,35 @@
 using System.Collections.Generic;
 using AgValoniaGPS.Models.Base;
 using AgValoniaGPS.Models.Track;
-using ReactiveUI;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace AgValoniaGPS.Models.State;
 
 /// <summary>
 /// YouTurn (automatic U-turn) state machine.
 /// </summary>
-public class YouTurnState : ReactiveObject
+public class YouTurnState : ObservableObject
 {
     // Enable/trigger
     private bool _isEnabled;
     public bool IsEnabled
     {
         get => _isEnabled;
-        set => this.RaiseAndSetIfChanged(ref _isEnabled, value);
+        set => SetProperty(ref _isEnabled, value);
     }
 
     private bool _isTriggered;
     public bool IsTriggered
     {
         get => _isTriggered;
-        set => this.RaiseAndSetIfChanged(ref _isTriggered, value);
+        set => SetProperty(ref _isTriggered, value);
     }
 
     private bool _isExecuting;
     public bool IsExecuting
     {
         get => _isExecuting;
-        set => this.RaiseAndSetIfChanged(ref _isExecuting, value);
+        set => SetProperty(ref _isExecuting, value);
     }
 
     // Turn path
@@ -53,14 +53,14 @@ public class YouTurnState : ReactiveObject
     public List<Vec3>? TurnPath
     {
         get => _turnPath;
-        set => this.RaiseAndSetIfChanged(ref _turnPath, value);
+        set => SetProperty(ref _turnPath, value);
     }
 
     private int _pathIndex;
     public int PathIndex
     {
         get => _pathIndex;
-        set => this.RaiseAndSetIfChanged(ref _pathIndex, value);
+        set => SetProperty(ref _pathIndex, value);
     }
 
     // Direction
@@ -68,14 +68,14 @@ public class YouTurnState : ReactiveObject
     public bool IsTurnLeft
     {
         get => _isTurnLeft;
-        set => this.RaiseAndSetIfChanged(ref _isTurnLeft, value);
+        set => SetProperty(ref _isTurnLeft, value);
     }
 
     private bool _lastTurnWasLeft;
     public bool LastTurnWasLeft
     {
         get => _lastTurnWasLeft;
-        set => this.RaiseAndSetIfChanged(ref _lastTurnWasLeft, value);
+        set => SetProperty(ref _lastTurnWasLeft, value);
     }
 
     // Distance tracking
@@ -83,14 +83,14 @@ public class YouTurnState : ReactiveObject
     public double DistanceToHeadland
     {
         get => _distanceToHeadland;
-        set => this.RaiseAndSetIfChanged(ref _distanceToHeadland, value);
+        set => SetProperty(ref _distanceToHeadland, value);
     }
 
     private double _distanceToTrigger;
     public double DistanceToTrigger
     {
         get => _distanceToTrigger;
-        set => this.RaiseAndSetIfChanged(ref _distanceToTrigger, value);
+        set => SetProperty(ref _distanceToTrigger, value);
     }
 
     // Next track after turn (unified Track model)
@@ -98,7 +98,7 @@ public class YouTurnState : ReactiveObject
     public Track.Track? NextTrack
     {
         get => _nextTrack;
-        set => this.RaiseAndSetIfChanged(ref _nextTrack, value);
+        set => SetProperty(ref _nextTrack, value);
     }
 
     // Completion tracking
@@ -106,14 +106,14 @@ public class YouTurnState : ReactiveObject
     public Vec2? LastCompletionPosition
     {
         get => _lastCompletionPosition;
-        set => this.RaiseAndSetIfChanged(ref _lastCompletionPosition, value);
+        set => SetProperty(ref _lastCompletionPosition, value);
     }
 
     private bool _hasCompletedFirstTurn;
     public bool HasCompletedFirstTurn
     {
         get => _hasCompletedFirstTurn;
-        set => this.RaiseAndSetIfChanged(ref _hasCompletedFirstTurn, value);
+        set => SetProperty(ref _hasCompletedFirstTurn, value);
     }
 
     // Counter for stability
@@ -121,7 +121,56 @@ public class YouTurnState : ReactiveObject
     public int YouTurnCounter
     {
         get => _youTurnCounter;
-        set => this.RaiseAndSetIfChanged(ref _youTurnCounter, value);
+        set => SetProperty(ref _youTurnCounter, value);
+    }
+
+    // Heading direction captured at turn start, used to compute the post-turn pass offset.
+    // Stored because _isHeadingSameWay on GuidanceState flips 180° once the turn completes.
+    private bool _wasHeadingSameWayAtTurnStart;
+    public bool WasHeadingSameWayAtTurnStart
+    {
+        get => _wasHeadingSameWayAtTurnStart;
+        set => SetProperty(ref _wasHeadingSameWayAtTurnStart, value);
+    }
+
+    // Pre-computed perpendicular offset to the next track (meters, always positive).
+    // Authoritative value for U-turn arc width — consumers should use this rather than recompute.
+    private double _nextTrackTurnOffset;
+    public double NextTrackTurnOffset
+    {
+        get => _nextTrackTurnOffset;
+        set => SetProperty(ref _nextTrackTurnOffset, value);
+    }
+
+    // When set, CompleteTurn jumps directly to this path number (used by snake / skip-worked modes).
+    private int? _returnPassTargetPath;
+    public int? ReturnPassTargetPath
+    {
+        get => _returnPassTargetPath;
+        set => SetProperty(ref _returnPassTargetPath, value);
+    }
+
+    // Pre-computed path sequence for skip-and-fill (snake) mode. Null when not in snake mode.
+    private System.Collections.Generic.List<int>? _snakeSequence;
+    public System.Collections.Generic.List<int>? SnakeSequence
+    {
+        get => _snakeSequence;
+        set => SetProperty(ref _snakeSequence, value);
+    }
+
+    private int _snakeIndex = -1;
+    public int SnakeIndex
+    {
+        get => _snakeIndex;
+        set => SetProperty(ref _snakeIndex, value);
+    }
+
+    // Zone the tractor is in — source of truth for turn creation gating.
+    private TractorZone _currentZone = TractorZone.OutsideBoundary;
+    public TractorZone CurrentZone
+    {
+        get => _currentZone;
+        set => SetProperty(ref _currentZone, value);
     }
 
     public void Reset()
@@ -135,6 +184,12 @@ public class YouTurnState : ReactiveObject
         NextTrack = null;
         HasCompletedFirstTurn = false;
         YouTurnCounter = 0;
+        WasHeadingSameWayAtTurnStart = false;
+        NextTrackTurnOffset = 0;
+        ReturnPassTargetPath = null;
+        SnakeSequence = null;
+        SnakeIndex = -1;
+        CurrentZone = TractorZone.OutsideBoundary;
     }
 
     public void CompleteTurn()

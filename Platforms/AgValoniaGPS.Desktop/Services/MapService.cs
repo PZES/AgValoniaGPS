@@ -51,7 +51,7 @@ public class MapService : IMapService
 
     public void Set3DMode(bool is3D) => GetMapControl().Set3DMode(is3D);
 
-    public bool Is3DMode => _mapControl != null && !GetMapControl().IsGridVisible; // TODO: Add Is3DMode to IMapControl
+    public bool Is3DMode => _mapControl?.Is3DMode ?? false;
 
     public void SetPitch(double deltaRadians) => GetMapControl().SetPitch(deltaRadians);
 
@@ -160,6 +160,16 @@ public class MapService : IMapService
     // YouTurn path visualization
     public void SetYouTurnPath(IReadOnlyList<(double Easting, double Northing)>? turnPath) =>
         GetMapControl().SetYouTurnPath(turnPath);
+
+    public void SetTramLines(
+        IReadOnlyList<AgValoniaGPS.Models.Base.Vec2>? outerTrack,
+        IReadOnlyList<AgValoniaGPS.Models.Base.Vec2>? innerTrack,
+        IReadOnlyList<IReadOnlyList<AgValoniaGPS.Models.Base.Vec2>>? parallelLines,
+        IReadOnlyList<IReadOnlyList<AgValoniaGPS.Models.Base.Vec2>>? boundaryExtraLines = null) =>
+        GetMapControl().SetTramLines(outerTrack, innerTrack, parallelLines, boundaryExtraLines);
+
+    public void SetTramControlByte(byte controlByte) =>
+        GetMapControl().SetTramControlByte(controlByte);
 
     // Track visualization for U-turns
     public void SetNextTrack(AgValoniaGPS.Models.Track.Track? track) =>

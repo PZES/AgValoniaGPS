@@ -17,12 +17,12 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Reactive;
 using System.Threading.Tasks;
-using ReactiveUI;
+
 using Microsoft.Extensions.Logging;
 using AgValoniaGPS.Models;
 using AgValoniaGPS.Models.State;
+using CommunityToolkit.Mvvm.Input;
 
 namespace AgValoniaGPS.ViewModels;
 
@@ -34,7 +34,7 @@ public partial class MainViewModel
     private void InitializeFieldCommands()
     {
         // Field Selection Dialog
-        ShowFieldSelectionDialogCommand = ReactiveCommand.Create(() =>
+        ShowFieldSelectionDialogCommand = new RelayCommand(() =>
         {
             var fieldsDir = _settingsService.Settings.FieldsDirectory;
             if (string.IsNullOrWhiteSpace(fieldsDir))
@@ -48,18 +48,40 @@ public partial class MainViewModel
             State.UI.ShowDialog(DialogType.FieldSelection);
         });
 
-        CancelFieldSelectionDialogCommand = ReactiveCommand.Create(() =>
+        CancelFieldSelectionDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
             SelectedFieldInfo = null;
         });
 
-        ConfirmFieldSelectionDialogCommand = ReactiveCommand.CreateFromTask(async () =>
+        ConfirmFieldSelectionDialogCommand = new AsyncRelayCommand(async () =>
         {
             if (SelectedFieldInfo == null) return;
 
             var fieldPath = Path.Combine(_fieldSelectionDirectory, SelectedFieldInfo.Name);
             var fieldName = SelectedFieldInfo.Name;
+
+            // Check if this is a legacy field that will be auto-converted
+            bool isLegacy = !File.Exists(Path.Combine(fieldPath, "field.geojson")) &&
+                            File.Exists(Path.Combine(fieldPath, "Field.txt"));
+
+            if (isLegacy)
+            {
+                State.UI.CloseDialog();
+                ShowConfirmationDialog(
+                    "Import Legacy Field",
+                    $"'{fieldName}' uses the legacy AgOpenGPS format. " +
+                    "It will be imported and converted to the new format. " +
+                    "The original files will be kept. Continue?",
+                    () =>
+                    {
+                        SelectedFieldInfo = null;
+                        _ = OpenFieldAsync(fieldPath, fieldName).ContinueWith(_ =>
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                IsJobMenuPanelVisible = false));
+                    });
+                return;
+            }
 
             State.UI.CloseDialog();
             SelectedFieldInfo = null;
@@ -68,7 +90,7 @@ public partial class MainViewModel
             IsJobMenuPanelVisible = false;
         });
 
-        DeleteSelectedFieldCommand = ReactiveCommand.Create(() =>
+        DeleteSelectedFieldCommand = new RelayCommand(() =>
         {
             if (SelectedFieldInfo == null) return;
 
@@ -89,7 +111,7 @@ public partial class MainViewModel
             }
         });
 
-        SortFieldsCommand = ReactiveCommand.Create(() =>
+        SortFieldsCommand = new RelayCommand(() =>
         {
             _fieldsSortedAZ = !_fieldsSortedAZ;
             var sorted = _fieldsSortedAZ
@@ -103,7 +125,7 @@ public partial class MainViewModel
         });
 
         // New Field Dialog
-        ShowNewFieldDialogCommand = ReactiveCommand.Create(() =>
+        ShowNewFieldDialogCommand = new RelayCommand(() =>
         {
             NewFieldLatitude = Latitude != 0 ? Latitude : 40.7128;
             NewFieldLongitude = Longitude != 0 ? Longitude : -74.0060;
@@ -111,13 +133,13 @@ public partial class MainViewModel
             State.UI.ShowDialog(DialogType.NewField);
         });
 
-        CancelNewFieldDialogCommand = ReactiveCommand.Create(() =>
+        CancelNewFieldDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
             NewFieldName = string.Empty;
         });
 
-        ConfirmNewFieldDialogCommand = ReactiveCommand.Create(() =>
+        ConfirmNewFieldDialogCommand = new RelayCommand(() =>
         {
             if (string.IsNullOrWhiteSpace(NewFieldName))
             {
@@ -162,11 +184,9 @@ public partial class MainViewModel
                 CurrentFieldName = NewFieldName;
                 FieldsRootDirectory = fieldsDir;
                 IsFieldOpen = true;
-                _simulatorLocalPlane = null;
 
                 // Set field origin for coordinate transformations
-                _fieldOriginLatitude = NewFieldLatitude;
-                _fieldOriginLongitude = NewFieldLongitude;
+                SetFieldOrigin(NewFieldLatitude, NewFieldLongitude);
 
                 // Create field object and set as active (required for headland/track saving)
                 var field = new Field
@@ -195,7 +215,7 @@ public partial class MainViewModel
         });
 
         // From Existing Field Dialog
-        ShowFromExistingFieldDialogCommand = ReactiveCommand.Create(() =>
+        ShowFromExistingFieldDialogCommand = new RelayCommand(() =>
         {
             var fieldsDir = _settingsService.Settings.FieldsDirectory;
             if (string.IsNullOrWhiteSpace(fieldsDir))
@@ -222,14 +242,14 @@ public partial class MainViewModel
             State.UI.ShowDialog(DialogType.FromExistingField);
         });
 
-        CancelFromExistingFieldDialogCommand = ReactiveCommand.Create(() =>
+        CancelFromExistingFieldDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
             FromExistingSelectedField = null;
             FromExistingFieldName = string.Empty;
         });
 
-        ConfirmFromExistingFieldDialogCommand = ReactiveCommand.Create(() =>
+        ConfirmFromExistingFieldDialogCommand = new RelayCommand(() =>
         {
             if (FromExistingSelectedField == null)
             {
@@ -336,7 +356,7 @@ public partial class MainViewModel
         });
 
         // Field name helper commands
-        AppendVehicleNameCommand = ReactiveCommand.Create(() =>
+        AppendVehicleNameCommand = new RelayCommand(() =>
         {
             var vehicleName = Vehicle.VehicleTypeDisplayName;
             if (!string.IsNullOrWhiteSpace(vehicleName))
@@ -345,19 +365,19 @@ public partial class MainViewModel
             }
         });
 
-        AppendDateCommand = ReactiveCommand.Create(() =>
+        AppendDateCommand = new RelayCommand(() =>
         {
             var dateStr = DateTime.Now.ToString("yyyy-MMM-dd");
             FromExistingFieldName = (FromExistingFieldName + " " + dateStr).Trim();
         });
 
-        AppendTimeCommand = ReactiveCommand.Create(() =>
+        AppendTimeCommand = new RelayCommand(() =>
         {
             var timeStr = DateTime.Now.ToString("HH-mm");
             FromExistingFieldName = (FromExistingFieldName + " " + timeStr).Trim();
         });
 
-        BackspaceFieldNameCommand = ReactiveCommand.Create(() =>
+        BackspaceFieldNameCommand = new RelayCommand(() =>
         {
             if (FromExistingFieldName.Length > 0)
             {
@@ -365,20 +385,22 @@ public partial class MainViewModel
             }
         });
 
-        ToggleCopyFlagsCommand = ReactiveCommand.Create(() => CopyFlags = !CopyFlags);
-        ToggleCopyMappingCommand = ReactiveCommand.Create(() => CopyMapping = !CopyMapping);
-        ToggleCopyHeadlandCommand = ReactiveCommand.Create(() => CopyHeadland = !CopyHeadland);
-        ToggleCopyLinesCommand = ReactiveCommand.Create(() => CopyLines = !CopyLines);
+        ToggleCopyFlagsCommand = new RelayCommand(() => CopyFlags = !CopyFlags);
+        ToggleCopyMappingCommand = new RelayCommand(() => CopyMapping = !CopyMapping);
+        ToggleCopyHeadlandCommand = new RelayCommand(() => CopyHeadland = !CopyHeadland);
+        ToggleCopyLinesCommand = new RelayCommand(() => CopyLines = !CopyLines);
 
         // KML Import Dialog
-        ShowKmlImportDialogCommand = ReactiveCommand.Create(() =>
+        ShowKmlImportDialogCommand = new RelayCommand(() =>
         {
+            _kmlImportToExistingField = false;
             PopulateAvailableKmlFiles();
             KmlImportFieldName = string.Empty;
             KmlBoundaryPointCount = 0;
             KmlCenterLatitude = 0;
             KmlCenterLongitude = 0;
             _kmlBoundaryPoints.Clear();
+            _kmlParsedPolygons.Clear();
             SelectedKmlFile = null;
 
             if (AvailableKmlFiles.Count > 0)
@@ -389,14 +411,14 @@ public partial class MainViewModel
             State.UI.ShowDialog(DialogType.KmlImport);
         });
 
-        CancelKmlImportDialogCommand = ReactiveCommand.Create(() =>
+        CancelKmlImportDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
             SelectedKmlFile = null;
             KmlImportFieldName = string.Empty;
         });
 
-        ConfirmKmlImportDialogCommand = ReactiveCommand.Create(() =>
+        ConfirmKmlImportDialogCommand = new RelayCommand(() =>
         {
             if (SelectedKmlFile == null)
             {
@@ -404,16 +426,24 @@ public partial class MainViewModel
                 return;
             }
 
+            if (_kmlParsedPolygons.Count == 0 || _kmlBoundaryPoints.Count < 3)
+            {
+                StatusMessage = "KML file must contain at least 3 boundary points";
+                return;
+            }
+
+            // Import to existing field mode (opened from boundary panel)
+            if (_kmlImportToExistingField)
+            {
+                ImportKmlToExistingField();
+                return;
+            }
+
+            // Create new field mode (opened from field creation)
             var newFieldName = KmlImportFieldName.Trim();
             if (string.IsNullOrWhiteSpace(newFieldName))
             {
                 StatusMessage = "Please enter a field name";
-                return;
-            }
-
-            if (_kmlBoundaryPoints.Count < 3)
-            {
-                StatusMessage = "KML file must contain at least 3 boundary points";
                 return;
             }
 
@@ -443,27 +473,54 @@ public partial class MainViewModel
                 var sharedProps = new SharedFieldProperties();
                 var localPlane = new LocalPlane(origin, sharedProps);
 
-                var outerPolygon = new BoundaryPolygon();
-                foreach (var (lat, lon) in _kmlBoundaryPoints)
+                var boundary = new Boundary();
+
+                // First polygon = outer boundary
+                for (int polyIdx = 0; polyIdx < _kmlParsedPolygons.Count; polyIdx++)
                 {
-                    var wgs84 = new Wgs84(lat, lon);
-                    var geoCoord = localPlane.ConvertWgs84ToGeoCoord(wgs84);
-                    outerPolygon.Points.Add(new BoundaryPoint(geoCoord.Easting, geoCoord.Northing, 0));
+                    var polygon = new BoundaryPolygon();
+                    foreach (var (lat, lon) in _kmlParsedPolygons[polyIdx])
+                    {
+                        var wgs84 = new Wgs84(lat, lon);
+                        var geoCoord = localPlane.ConvertWgs84ToGeoCoord(wgs84);
+                        polygon.Points.Add(new BoundaryPoint(geoCoord.Easting, geoCoord.Northing, 0));
+                    }
+
+                    if (polyIdx == 0)
+                        boundary.OuterBoundary = polygon;
+                    else
+                        boundary.InnerBoundaries.Add(polygon);
                 }
 
-                var boundary = new Boundary { OuterBoundary = outerPolygon };
                 _boundaryFileService.SaveBoundary(boundary, newFieldPath);
+
+                // Set field origin so coordinate conversions work
+                SetFieldOrigin(KmlCenterLatitude, KmlCenterLongitude);
 
                 CurrentFieldName = newFieldName;
                 FieldsRootDirectory = fieldsDir;
                 IsFieldOpen = true;
 
+                // Load boundary into map renderer
+                SetCurrentBoundary(boundary);
+                CenterMapOnBoundary(boundary);
+
+                // Update boundary area stats
+                var boundaryAreas = new List<double> { boundary.AreaHectares * 10000 };
+                _fieldStatistics.UpdateBoundaryAreas(boundaryAreas);
+                OnPropertyChanged(nameof(BoundaryAreaDisplay));
+
                 _settingsService.Settings.LastOpenedField = newFieldName;
                 _settingsService.Save();
 
+                RefreshBoundaryList();
+                SetSimulatorCoordinates(_fieldOriginLatitude, _fieldOriginLongitude);
+
                 State.UI.CloseDialog();
                 IsJobMenuPanelVisible = false;
-                StatusMessage = $"Imported KML: {newFieldName}";
+                var innerCount = _kmlParsedPolygons.Count - 1;
+                var innerMsg = innerCount > 0 ? $" ({innerCount} inner boundaries)" : "";
+                StatusMessage = $"Imported KML: {newFieldName}{innerMsg}";
             }
             catch (Exception ex)
             {
@@ -471,19 +528,19 @@ public partial class MainViewModel
             }
         });
 
-        KmlAppendDateCommand = ReactiveCommand.Create(() =>
+        KmlAppendDateCommand = new RelayCommand(() =>
         {
             var dateStr = DateTime.Now.ToString("yyyy-MMM-dd");
             KmlImportFieldName = (KmlImportFieldName + " " + dateStr).Trim();
         });
 
-        KmlAppendTimeCommand = ReactiveCommand.Create(() =>
+        KmlAppendTimeCommand = new RelayCommand(() =>
         {
             var timeStr = DateTime.Now.ToString("HH-mm");
             KmlImportFieldName = (KmlImportFieldName + " " + timeStr).Trim();
         });
 
-        KmlBackspaceFieldNameCommand = ReactiveCommand.Create(() =>
+        KmlBackspaceFieldNameCommand = new RelayCommand(() =>
         {
             if (KmlImportFieldName.Length > 0)
             {
@@ -492,7 +549,7 @@ public partial class MainViewModel
         });
 
         // ISO-XML Import Dialog
-        ShowIsoXmlImportDialogCommand = ReactiveCommand.Create(() =>
+        ShowIsoXmlImportDialogCommand = new RelayCommand(() =>
         {
             PopulateAvailableIsoXmlFiles();
             IsoXmlImportFieldName = string.Empty;
@@ -506,14 +563,14 @@ public partial class MainViewModel
             State.UI.ShowDialog(DialogType.IsoXmlImport);
         });
 
-        CancelIsoXmlImportDialogCommand = ReactiveCommand.Create(() =>
+        CancelIsoXmlImportDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
             SelectedIsoXmlFile = null;
             IsoXmlImportFieldName = string.Empty;
         });
 
-        ConfirmIsoXmlImportDialogCommand = ReactiveCommand.Create(() =>
+        ConfirmIsoXmlImportDialogCommand = new RelayCommand(() =>
         {
             if (SelectedIsoXmlFile == null)
             {
@@ -564,19 +621,19 @@ public partial class MainViewModel
             }
         });
 
-        IsoXmlAppendDateCommand = ReactiveCommand.Create(() =>
+        IsoXmlAppendDateCommand = new RelayCommand(() =>
         {
             var dateStr = DateTime.Now.ToString("yyyy-MMM-dd");
             IsoXmlImportFieldName = (IsoXmlImportFieldName + " " + dateStr).Trim();
         });
 
-        IsoXmlAppendTimeCommand = ReactiveCommand.Create(() =>
+        IsoXmlAppendTimeCommand = new RelayCommand(() =>
         {
             var timeStr = DateTime.Now.ToString("HH-mm");
             IsoXmlImportFieldName = (IsoXmlImportFieldName + " " + timeStr).Trim();
         });
 
-        IsoXmlBackspaceFieldNameCommand = ReactiveCommand.Create(() =>
+        IsoXmlBackspaceFieldNameCommand = new RelayCommand(() =>
         {
             if (IsoXmlImportFieldName.Length > 0)
             {
@@ -585,7 +642,7 @@ public partial class MainViewModel
         });
 
         // Field close and resume commands
-        CloseFieldCommand = ReactiveCommand.CreateFromTask(async () =>
+        CloseFieldCommand = new AsyncRelayCommand(async () =>
         {
             await CloseFieldAsync();
 
@@ -598,7 +655,7 @@ public partial class MainViewModel
             StatusMessage = "Field closed";
         });
 
-        DriveInCommand = ReactiveCommand.Create(() =>
+        DriveInCommand = new RelayCommand(() =>
         {
             // Start a new field at current GPS position
             if (Latitude != 0 && Longitude != 0)
@@ -607,7 +664,7 @@ public partial class MainViewModel
             }
         });
 
-        ResumeFieldCommand = ReactiveCommand.CreateFromTask(async () =>
+        ResumeFieldCommand = new AsyncRelayCommand(async () =>
         {
             var lastField = _settingsService.Settings.LastOpenedField;
             if (string.IsNullOrEmpty(lastField))
@@ -630,6 +687,26 @@ public partial class MainViewModel
             if (!Directory.Exists(fieldPath))
             {
                 StatusMessage = $"Field not found: {lastField}";
+                return;
+            }
+
+            // Check if this is a legacy field that will be auto-converted
+            bool isLegacy = !File.Exists(Path.Combine(fieldPath, "field.geojson")) &&
+                            File.Exists(Path.Combine(fieldPath, "Field.txt"));
+
+            if (isLegacy)
+            {
+                ShowConfirmationDialog(
+                    "Import Legacy Field",
+                    $"'{lastField}' uses the legacy AgOpenGPS format. " +
+                    "It will be imported and converted to the new format. " +
+                    "The original files will be kept. Continue?",
+                    () =>
+                    {
+                        _ = OpenFieldAsync(fieldPath, lastField).ContinueWith(_ =>
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                IsJobMenuPanelVisible = false));
+                    });
                 return;
             }
 

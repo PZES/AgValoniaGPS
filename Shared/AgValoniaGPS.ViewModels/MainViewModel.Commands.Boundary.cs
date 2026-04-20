@@ -17,13 +17,13 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Reactive;
-using ReactiveUI;
+
 using Microsoft.Extensions.Logging;
 using AgValoniaGPS.Models;
 using AgValoniaGPS.Models.Base;
 using AgValoniaGPS.Models.State;
 using AgValoniaGPS.Services.Interfaces;
+using CommunityToolkit.Mvvm.Input;
 
 namespace AgValoniaGPS.ViewModels;
 
@@ -35,7 +35,7 @@ public partial class MainViewModel
     private void InitializeBoundaryCommands()
     {
         // Boundary Map Dialog Commands (satellite map boundary drawing)
-        ShowBoundaryMapDialogCommand = ReactiveCommand.Create(() =>
+        ShowBoundaryMapDialogCommand = new RelayCommand(() =>
         {
             if (_fieldOriginLatitude != 0 || _fieldOriginLongitude != 0)
             {
@@ -52,16 +52,17 @@ public partial class MainViewModel
             BoundaryMapCanSave = false;
             BoundaryMapCoordinateText = string.Empty;
             BoundaryMapResultPoints.Clear();
+            PopulateBoundaryMapExistingPolygons();
             State.UI.ShowDialog(DialogType.BoundaryMap);
         });
 
-        CancelBoundaryMapDialogCommand = ReactiveCommand.Create(() =>
+        CancelBoundaryMapDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
             BoundaryMapResultPoints.Clear();
         });
 
-        ConfirmBoundaryMapDialogCommand = ReactiveCommand.Create(() =>
+        ConfirmBoundaryMapDialogCommand = new RelayCommand(() =>
         {
             if (BoundaryMapResultPoints.Count >= 3 && IsFieldOpen && !string.IsNullOrEmpty(CurrentFieldName))
             {
@@ -92,7 +93,11 @@ public partial class MainViewModel
                         _logger.LogDebug($"[BoundaryMap] Point WGS84: ({lat:F8}, {lon:F8}) -> Local: ({geoCoord.Easting:F2}, {geoCoord.Northing:F2})");
                     }
 
-                    boundary.OuterBoundary = outerPolygon;
+                    if (PendingBoundaryType == BoundaryType.Inner)
+                        boundary.InnerBoundaries.Add(outerPolygon);
+                    else
+                        boundary.OuterBoundary = outerPolygon;
+
                     _boundaryFileService.SaveBoundary(boundary, fieldPath);
 
                     // NOTE: Do NOT overwrite the field origin - it should stay constant!
@@ -101,7 +106,8 @@ public partial class MainViewModel
 
                     SetCurrentBoundary(boundary);
 
-                    if (outerPolygon.Points.Count > 0)
+                    // Pan to boundary center only for outer boundaries
+                    if (PendingBoundaryType == BoundaryType.Outer && outerPolygon.Points.Count > 0)
                     {
                         double minE = double.MaxValue, maxE = double.MinValue;
                         double minN = double.MaxValue, maxN = double.MinValue;
@@ -134,7 +140,9 @@ public partial class MainViewModel
                     }
 
                     RefreshBoundaryList();
-                    StatusMessage = $"Boundary created with {BoundaryMapResultPoints.Count} points";
+                    var mapTypeLabel = PendingBoundaryType == BoundaryType.Inner ? "Inner boundary" : "Boundary";
+                    StatusMessage = $"{mapTypeLabel} created with {BoundaryMapResultPoints.Count} points";
+                    PendingBoundaryType = BoundaryType.Outer; // Reset to default
                 }
                 catch (Exception ex)
                 {
@@ -148,27 +156,27 @@ public partial class MainViewModel
         });
 
         // AgShare Dialogs
-        ShowAgShareDownloadDialogCommand = ReactiveCommand.Create(() =>
+        ShowAgShareDownloadDialogCommand = new RelayCommand(() =>
         {
             State.UI.ShowDialog(DialogType.AgShareDownload);
         });
 
-        CancelAgShareDownloadDialogCommand = ReactiveCommand.Create(() =>
+        CancelAgShareDownloadDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
         });
 
-        ShowAgShareUploadDialogCommand = ReactiveCommand.Create(() =>
+        ShowAgShareUploadDialogCommand = new RelayCommand(() =>
         {
             State.UI.ShowDialog(DialogType.AgShareUpload);
         });
 
-        CancelAgShareUploadDialogCommand = ReactiveCommand.Create(() =>
+        CancelAgShareUploadDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
         });
 
-        ShowAgShareSettingsDialogCommand = ReactiveCommand.Create(() =>
+        ShowAgShareSettingsDialogCommand = new RelayCommand(() =>
         {
             AgShareSettingsServerUrl = _settingsService.Settings.AgShareServer;
             AgShareSettingsApiKey = _settingsService.Settings.AgShareApiKey;
@@ -176,12 +184,12 @@ public partial class MainViewModel
             State.UI.ShowDialog(DialogType.AgShareSettings);
         });
 
-        CancelAgShareSettingsDialogCommand = ReactiveCommand.Create(() =>
+        CancelAgShareSettingsDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
         });
 
-        ConfirmAgShareSettingsDialogCommand = ReactiveCommand.Create(() =>
+        ConfirmAgShareSettingsDialogCommand = new RelayCommand(() =>
         {
             _settingsService.Settings.AgShareServer = AgShareSettingsServerUrl;
             _settingsService.Settings.AgShareApiKey = AgShareSettingsApiKey;
@@ -191,24 +199,24 @@ public partial class MainViewModel
             StatusMessage = "AgShare settings saved";
         });
 
-        ShowBoundaryDialogCommand = ReactiveCommand.Create(() =>
+        ShowBoundaryDialogCommand = new RelayCommand(() =>
         {
             IsBoundaryPanelVisible = !IsBoundaryPanelVisible;
         });
 
         // Headland Commands
-        ShowHeadlandBuilderCommand = ReactiveCommand.Create(() =>
+        ShowHeadlandBuilderCommand = new RelayCommand(() =>
         {
             if (!IsFieldOpen)
             {
                 StatusMessage = "Open a field first";
                 return;
             }
-            State.UI.ShowDialog(DialogType.HeadlandBuilder);
+            State.UI.ShowDialog(DialogType.FieldBuilder);
             UpdateHeadlandPreview();
         });
 
-        ToggleHeadlandCommand = ReactiveCommand.Create(() =>
+        ToggleHeadlandCommand = new RelayCommand(() =>
         {
             if (!HasHeadland)
             {
@@ -218,13 +226,13 @@ public partial class MainViewModel
             IsHeadlandOn = !IsHeadlandOn;
         });
 
-        ToggleSectionInHeadlandCommand = ReactiveCommand.Create(() =>
+        ToggleSectionInHeadlandCommand = new RelayCommand(() =>
         {
             IsSectionControlInHeadland = !IsSectionControlInHeadland;
             StatusMessage = IsSectionControlInHeadland ? "Section control in headland: ON" : "Section control in headland: OFF";
         });
 
-        ResetToolHeadingCommand = ReactiveCommand.Create(() =>
+        ResetToolHeadingCommand = new RelayCommand(() =>
         {
             // Reset tool heading to match vehicle heading
             // This synchronizes the implement direction with the tractor
@@ -236,12 +244,22 @@ public partial class MainViewModel
             StatusMessage = "Tool heading reset to vehicle heading";
         });
 
-        BuildHeadlandCommand = ReactiveCommand.Create(() =>
+        BuildHeadlandCommand = new RelayCommand(() =>
         {
-            BuildHeadlandFromBoundary();
+            // If segments exist, rebuild from segments; otherwise fall back to Clipper2
+            if (HeadlandSegments.Count > 0)
+            {
+                foreach (var seg in HeadlandSegments)
+                    ComputeSegmentOffset(seg);
+                BuildHeadlandFromSegments();
+            }
+            else
+            {
+                BuildHeadlandFromBoundary();
+            }
         });
 
-        ClearHeadlandCommand = ReactiveCommand.Create(() =>
+        ClearHeadlandCommand = new RelayCommand(() =>
         {
             CurrentHeadlandLine = null;
             HeadlandPreviewLine = null;
@@ -250,88 +268,94 @@ public partial class MainViewModel
             StatusMessage = "Headland cleared";
         });
 
-        CloseHeadlandBuilderCommand = ReactiveCommand.Create(() =>
+        CloseHeadlandBuilderCommand = new RelayCommand(() =>
         {
             HeadlandPreviewLine = null;
             State.UI.CloseDialog();
         });
 
-        SetHeadlandToToolWidthCommand = ReactiveCommand.Create(() =>
+        SetHeadlandToToolWidthCommand = new RelayCommand(() =>
         {
             double actualWidth = ConfigStore.ActualToolWidth;
             HeadlandDistance = actualWidth > 0 ? actualWidth * 2 : 12.0;
             UpdateHeadlandPreview();
         });
 
-        PreviewHeadlandCommand = ReactiveCommand.Create(() =>
+        PreviewHeadlandCommand = new RelayCommand(() =>
         {
             UpdateHeadlandPreview();
         });
 
-        IncrementHeadlandDistanceCommand = ReactiveCommand.Create(() =>
+        IncrementHeadlandDistanceCommand = new RelayCommand(() =>
         {
             HeadlandDistance = Math.Min(HeadlandDistance + 0.5, 100.0);
             UpdateHeadlandPreview();
         });
 
-        DecrementHeadlandDistanceCommand = ReactiveCommand.Create(() =>
+        DecrementHeadlandDistanceCommand = new RelayCommand(() =>
         {
             HeadlandDistance = Math.Max(HeadlandDistance - 0.5, 0.5);
             UpdateHeadlandPreview();
         });
 
-        IncrementHeadlandPassesCommand = ReactiveCommand.Create(() =>
+        IncrementHeadlandPassesCommand = new RelayCommand(() =>
         {
             HeadlandPasses = Math.Min(HeadlandPasses + 1, 10);
             UpdateHeadlandPreview();
         });
 
-        DecrementHeadlandPassesCommand = ReactiveCommand.Create(() =>
+        DecrementHeadlandPassesCommand = new RelayCommand(() =>
         {
             HeadlandPasses = Math.Max(HeadlandPasses - 1, 1);
             UpdateHeadlandPreview();
         });
 
-        // Headland Dialog (FormHeadLine) commands
-        ShowHeadlandDialogCommand = ReactiveCommand.Create(() =>
+        // Headland Dialog - now opens Field Builder
+        ShowHeadlandDialogCommand = new RelayCommand(() =>
         {
-            State.UI.ShowDialog(DialogType.Headland);
+            State.UI.ShowDialog(DialogType.FieldBuilder);
             UpdateHeadlandPreview();
         });
 
-        CloseHeadlandDialogCommand = ReactiveCommand.Create(() =>
+        CloseHeadlandDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
             HeadlandPreviewLine = null;
         });
 
-        ExtendHeadlandACommand = ReactiveCommand.Create(() =>
+        ExtendHeadlandACommand = new RelayCommand(() =>
         {
             AdjustHeadlandDistance(1.0);
         });
 
-        ExtendHeadlandBCommand = ReactiveCommand.Create(() =>
+        ExtendHeadlandBCommand = new RelayCommand(() =>
         {
             AdjustHeadlandDistance(0.25);
         });
 
-        ShrinkHeadlandACommand = ReactiveCommand.Create(() =>
+        ShrinkHeadlandACommand = new RelayCommand(() =>
         {
             AdjustHeadlandDistance(-1.0);
         });
 
-        ShrinkHeadlandBCommand = ReactiveCommand.Create(() =>
+        ShrinkHeadlandBCommand = new RelayCommand(() =>
         {
             AdjustHeadlandDistance(-0.25);
         });
 
-        ResetHeadlandCommand = ReactiveCommand.Create(() =>
+        ResetHeadlandCommand = new RelayCommand(() =>
         {
+            // Save for undo
+            _previousHeadlandLine = _currentHeadlandLine != null ? new List<Vec3>(_currentHeadlandLine) : null;
+            _previousHasHeadland = HasHeadland;
+
             ClearHeadlandCommand?.Execute(null);
+            OnPropertyChanged(nameof(HeadlandStatusText));
+            OnPropertyChanged(nameof(CurrentHeadlandLineForPreview));
             StatusMessage = "Headland reset";
         });
 
-        ClipHeadlandLineCommand = ReactiveCommand.Create(() =>
+        ClipHeadlandLineCommand = new RelayCommand(() =>
         {
             if (!HeadlandPointsSelected)
             {
@@ -349,40 +373,79 @@ public partial class MainViewModel
             ClipHeadlandAtLine(headlandToClip);
         });
 
-        UndoHeadlandCommand = ReactiveCommand.Create(() =>
+        UndoHeadlandCommand = new RelayCommand(() =>
         {
-            StatusMessage = "Undo - not yet implemented";
+            if (_previousHeadlandLine == null && !_previousHasHeadland)
+            {
+                StatusMessage = "Nothing to undo";
+                return;
+            }
+
+            // Restore previous state
+            CurrentHeadlandLine = _previousHeadlandLine;
+            HasHeadland = _previousHasHeadland;
+            IsHeadlandOn = _previousHasHeadland;
+
+            if (_previousHeadlandLine != null && _previousHeadlandLine.Count >= 3)
+            {
+                _currentHeadlandLine = _previousHeadlandLine;
+                State.Field.HeadlandLine = _previousHeadlandLine;
+                _mapService.SetHeadlandLine(_previousHeadlandLine);
+                _mapService.SetHeadlandVisible(true);
+            }
+            else
+            {
+                _currentHeadlandLine = null;
+                State.Field.HeadlandLine = null;
+                _mapService.SetHeadlandVisible(false);
+            }
+
+            _previousHeadlandLine = null;
+            _previousHasHeadland = false;
+
+            OnPropertyChanged(nameof(HeadlandStatusText));
+            OnPropertyChanged(nameof(CurrentHeadlandLineForPreview));
+            StatusMessage = "Headland undone";
         });
 
-        TurnOffHeadlandCommand = ReactiveCommand.Create(() =>
+        TurnOffHeadlandCommand = new RelayCommand(() =>
         {
+            // Save for undo
+            _previousHeadlandLine = _currentHeadlandLine != null ? new List<Vec3>(_currentHeadlandLine) : null;
+            _previousHasHeadland = HasHeadland;
+
             IsHeadlandOn = false;
             HasHeadland = false;
             CurrentHeadlandLine = null;
             HeadlandPreviewLine = null;
+            _currentHeadlandLine = null;
+            State.Field.HeadlandLine = null;
+            _mapService.SetHeadlandVisible(false);
+            OnPropertyChanged(nameof(HeadlandStatusText));
+            OnPropertyChanged(nameof(CurrentHeadlandLineForPreview));
             StatusMessage = "Headland turned off";
         });
 
         // Boundary Recording Commands
-        ToggleBoundaryPanelCommand = ReactiveCommand.Create(() =>
+        ToggleBoundaryPanelCommand = new RelayCommand(() =>
         {
             IsBoundaryPanelVisible = !IsBoundaryPanelVisible;
         });
 
-        StartBoundaryRecordingCommand = ReactiveCommand.Create(() =>
+        StartBoundaryRecordingCommand = new RelayCommand(() =>
         {
             _boundaryRecordingService.StartRecording(BoundaryType.Outer);
             StatusMessage = "Boundary recording started";
         });
 
-        PauseBoundaryRecordingCommand = ReactiveCommand.Create(() =>
+        PauseBoundaryRecordingCommand = new RelayCommand(() =>
         {
             _boundaryRecordingService.PauseRecording();
             IsBoundaryRecording = false;
             StatusMessage = "Boundary recording paused";
         });
 
-        StopBoundaryRecordingCommand = ReactiveCommand.Create(() =>
+        StopBoundaryRecordingCommand = new RelayCommand(() =>
         {
             var polygon = _boundaryRecordingService.StopRecording();
 
@@ -392,11 +455,17 @@ public partial class MainViewModel
                 {
                     var fieldPath = Path.Combine(_settingsService.Settings.FieldsDirectory, CurrentFieldName);
                     var boundary = _boundaryFileService.LoadBoundary(fieldPath) ?? new Boundary();
-                    boundary.OuterBoundary = polygon;
+
+                    if (_boundaryRecordingService.CurrentBoundaryType == BoundaryType.Inner)
+                        boundary.InnerBoundaries.Add(polygon);
+                    else
+                        boundary.OuterBoundary = polygon;
+
                     _boundaryFileService.SaveBoundary(boundary, fieldPath);
                     SetCurrentBoundary(boundary);
                     RefreshBoundaryList();
-                    StatusMessage = $"Boundary saved with {polygon.Points.Count} points, Area: {polygon.AreaHectares:F2} Ha";
+                    var typeLabel = _boundaryRecordingService.CurrentBoundaryType == BoundaryType.Inner ? "Inner boundary" : "Boundary";
+                    StatusMessage = $"{typeLabel} saved with {polygon.Points.Count} points, Area: {polygon.AreaHectares:F2} Ha";
                 }
                 else
                 {
@@ -412,7 +481,7 @@ public partial class MainViewModel
             IsBoundaryRecording = false;
         });
 
-        ToggleRecordingCommand = ReactiveCommand.Create(() =>
+        ToggleRecordingCommand = new RelayCommand(() =>
         {
             if (IsBoundaryRecording)
             {
@@ -428,18 +497,18 @@ public partial class MainViewModel
             }
         });
 
-        UndoBoundaryPointCommand = ReactiveCommand.Create(() =>
+        UndoBoundaryPointCommand = new RelayCommand(() =>
         {
             _boundaryRecordingService.RemoveLastPoint();
         });
 
-        ClearBoundaryCommand = ReactiveCommand.Create(() =>
+        ClearBoundaryCommand = new RelayCommand(() =>
         {
             _boundaryRecordingService.ClearPoints();
             StatusMessage = "Boundary cleared";
         });
 
-        AddBoundaryPointCommand = ReactiveCommand.Create(() =>
+        AddBoundaryPointCommand = new RelayCommand(() =>
         {
             double headingRadians = Heading * Math.PI / 180.0;
             var (offsetEasting, offsetNorthing) = CalculateOffsetPosition(Easting, Northing, headingRadians);
@@ -447,17 +516,17 @@ public partial class MainViewModel
             StatusMessage = $"Point added ({_boundaryRecordingService.PointCount} total)";
         });
 
-        ToggleBoundaryLeftRightCommand = ReactiveCommand.Create(() =>
+        ToggleBoundaryLeftRightCommand = new RelayCommand(() =>
         {
             IsDrawRightSide = !IsDrawRightSide;
         });
 
-        ToggleBoundaryAntennaToolCommand = ReactiveCommand.Create(() =>
+        ToggleBoundaryAntennaToolCommand = new RelayCommand(() =>
         {
             IsDrawAtPivot = !IsDrawAtPivot;
         });
 
-        ShowBoundaryOffsetDialogCommand = ReactiveCommand.Create(() =>
+        ShowBoundaryOffsetDialogCommand = new RelayCommand(() =>
         {
             NumericInputDialogTitle = "Boundary Offset (cm)";
             NumericInputDialogValue = (decimal)BoundaryOffset;
@@ -472,13 +541,13 @@ public partial class MainViewModel
             State.UI.ShowDialog(DialogType.NumericInput);
         });
 
-        CancelNumericInputDialogCommand = ReactiveCommand.Create(() =>
+        CancelNumericInputDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
             _numericInputDialogCallback = null;
         });
 
-        ConfirmNumericInputDialogCommand = ReactiveCommand.Create(() =>
+        ConfirmNumericInputDialogCommand = new RelayCommand(() =>
         {
             if (NumericInputDialogValue.HasValue && _numericInputDialogCallback != null)
             {
@@ -489,29 +558,39 @@ public partial class MainViewModel
         });
 
         // Confirmation Dialog Commands
-        CancelConfirmationDialogCommand = ReactiveCommand.Create(() =>
+        CancelConfirmationDialogCommand = new RelayCommand(() =>
         {
-            State.UI.CloseDialog();
+            var prev = _previousDialogBeforeConfirmation;
             _confirmationDialogCallback = null;
+            _previousDialogBeforeConfirmation = Models.State.DialogType.None;
+            if (prev != Models.State.DialogType.None && prev != Models.State.DialogType.Confirmation)
+                State.UI.ShowDialog(prev);
+            else
+                State.UI.CloseDialog();
         });
 
-        ConfirmConfirmationDialogCommand = ReactiveCommand.Create(() =>
+        ConfirmConfirmationDialogCommand = new RelayCommand(() =>
         {
             var callback = _confirmationDialogCallback;
-            State.UI.CloseDialog();
+            var prev = _previousDialogBeforeConfirmation;
             _confirmationDialogCallback = null;
+            _previousDialogBeforeConfirmation = Models.State.DialogType.None;
+            if (prev != Models.State.DialogType.None && prev != Models.State.DialogType.Confirmation)
+                State.UI.ShowDialog(prev);
+            else
+                State.UI.CloseDialog();
             callback?.Invoke();
         });
 
         // Error Dialog Command
-        DismissErrorDialogCommand = ReactiveCommand.Create(() =>
+        DismissErrorDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
         });
 
-        DeleteBoundaryCommand = ReactiveCommand.Create(DeleteSelectedBoundary);
+        DeleteBoundaryCommand = new RelayCommand(DeleteSelectedBoundary);
 
-        ImportKmlBoundaryCommand = ReactiveCommand.Create(() =>
+        ImportKmlBoundaryCommand = new RelayCommand(() =>
         {
             if (!IsFieldOpen || string.IsNullOrEmpty(CurrentFieldName))
             {
@@ -519,10 +598,25 @@ public partial class MainViewModel
                 return;
             }
 
+            _kmlImportToExistingField = true;
+            PopulateAvailableKmlFiles();
+            KmlImportFieldName = CurrentFieldName;
+            KmlBoundaryPointCount = 0;
+            KmlCenterLatitude = 0;
+            KmlCenterLongitude = 0;
+            _kmlBoundaryPoints.Clear();
+            _kmlParsedPolygons.Clear();
+            SelectedKmlFile = null;
+
+            if (AvailableKmlFiles.Count > 0)
+            {
+                SelectedKmlFile = AvailableKmlFiles[0];
+            }
+
             State.UI.ShowDialog(DialogType.KmlImport);
         });
 
-        DrawMapBoundaryCommand = ReactiveCommand.Create(() =>
+        DrawMapBoundaryCommand = new RelayCommand(() =>
         {
             if (!IsFieldOpen || string.IsNullOrEmpty(CurrentFieldName))
             {
@@ -532,12 +626,46 @@ public partial class MainViewModel
             ShowBoundaryMapDialogCommand?.Execute(null);
         });
 
-        BuildFromTracksCommand = ReactiveCommand.Create(() =>
+        BuildFromTracksCommand = new RelayCommand(() =>
         {
-            StatusMessage = "Build boundary from tracks not yet implemented";
+            if (!IsFieldOpen || string.IsNullOrEmpty(CurrentFieldName))
+            {
+                StatusMessage = "Open a field first";
+                return;
+            }
+
+            var tracks = SavedTracks.Where(t => t.Points.Count >= 2).ToList();
+            if (tracks.Count < 2)
+            {
+                StatusMessage = "Need at least 2 tracks to build a boundary";
+                return;
+            }
+
+            var polygon = _boundaryBuilderService.BuildBoundaryFromTracks(tracks);
+            if (polygon == null || polygon.Points.Count < 3)
+            {
+                StatusMessage = "Could not build boundary - tracks may not intersect";
+                return;
+            }
+
+            var fieldPath = Path.Combine(_settingsService.Settings.FieldsDirectory, CurrentFieldName);
+            var boundary = _boundaryFileService.LoadBoundary(fieldPath) ?? new Boundary();
+
+            if (PendingBoundaryType == BoundaryType.Inner)
+                boundary.InnerBoundaries.Add(polygon);
+            else
+                boundary.OuterBoundary = polygon;
+
+            _boundaryFileService.SaveBoundary(boundary, fieldPath);
+            SetCurrentBoundary(boundary);
+            RefreshBoundaryList();
+
+            var typeLabel = PendingBoundaryType == BoundaryType.Inner ? "Inner boundary" : "Boundary";
+            StatusMessage = $"{typeLabel} built from {tracks.Count} tracks ({polygon.Points.Count} points)";
+            PendingBoundaryType = BoundaryType.Outer;
         });
 
-        DriveAroundFieldCommand = ReactiveCommand.Create(() =>
+        DriveAroundFieldCommand = new RelayCommand(() =>
         {
             if (!IsFieldOpen || string.IsNullOrEmpty(CurrentFieldName))
             {
@@ -552,6 +680,95 @@ public partial class MainViewModel
             _boundaryRecordingService.PauseRecording();
 
             StatusMessage = "Drive around the field boundary. Click Record to start.";
+        });
+
+        RecordInnerBoundaryCommand = new RelayCommand(() =>
+        {
+            if (!IsFieldOpen || string.IsNullOrEmpty(CurrentFieldName))
+            {
+                StatusMessage = "Open a field first before recording a boundary";
+                return;
+            }
+
+            _boundaryRecordingService.StartRecording(BoundaryType.Inner);
+            StatusMessage = "Recording inner boundary (obstacle)";
+        });
+
+        DriveAroundInnerBoundaryCommand = new RelayCommand(() =>
+        {
+            if (!IsFieldOpen || string.IsNullOrEmpty(CurrentFieldName))
+            {
+                StatusMessage = "Open a field first before recording a boundary";
+                return;
+            }
+
+            IsBoundaryPanelVisible = false;
+            IsBoundaryPlayerPanelVisible = true;
+
+            _boundaryRecordingService.StartRecording(BoundaryType.Inner);
+            _boundaryRecordingService.PauseRecording();
+
+            StatusMessage = "Drive around the obstacle. Click Record to start.";
+        });
+
+        DrawMapInnerBoundaryCommand = new RelayCommand(() =>
+        {
+            if (!IsFieldOpen || string.IsNullOrEmpty(CurrentFieldName))
+            {
+                StatusMessage = "Open a field first to add boundary";
+                return;
+            }
+            PendingBoundaryType = BoundaryType.Inner;
+            ShowBoundaryMapDialogCommand?.Execute(null);
+        });
+
+        ToggleDriveThroughCommand = new RelayCommand(() =>
+        {
+            if (SelectedBoundaryIndex < 0)
+            {
+                StatusMessage = "Select a boundary first";
+                return;
+            }
+
+            if (string.IsNullOrEmpty(CurrentFieldName)) return;
+
+            var fieldPath = Path.Combine(_settingsService.Settings.FieldsDirectory, CurrentFieldName);
+            var boundary = _boundaryFileService.LoadBoundary(fieldPath);
+            if (boundary == null) return;
+
+            // Map selected index to the correct boundary polygon
+            int currentIndex = 0;
+
+            if (boundary.OuterBoundary != null && boundary.OuterBoundary.IsValid)
+            {
+                if (currentIndex == SelectedBoundaryIndex)
+                {
+                    boundary.OuterBoundary.IsDriveThrough = !boundary.OuterBoundary.IsDriveThrough;
+                    _boundaryFileService.SaveBoundary(boundary, fieldPath);
+                    SetCurrentBoundary(boundary);
+                    RefreshBoundaryList();
+                    StatusMessage = $"Outer boundary drive-through: {(boundary.OuterBoundary.IsDriveThrough ? "On" : "Off")}";
+                    return;
+                }
+                currentIndex++;
+            }
+
+            for (int i = 0; i < boundary.InnerBoundaries.Count; i++)
+            {
+                if (boundary.InnerBoundaries[i].IsValid)
+                {
+                    if (currentIndex == SelectedBoundaryIndex)
+                    {
+                        boundary.InnerBoundaries[i].IsDriveThrough = !boundary.InnerBoundaries[i].IsDriveThrough;
+                        _boundaryFileService.SaveBoundary(boundary, fieldPath);
+                        SetCurrentBoundary(boundary);
+                        RefreshBoundaryList();
+                        StatusMessage = $"Inner {i + 1} drive-through: {(boundary.InnerBoundaries[i].IsDriveThrough ? "On" : "Off")}";
+                        return;
+                    }
+                    currentIndex++;
+                }
+            }
         });
     }
 }

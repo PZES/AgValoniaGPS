@@ -14,7 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-using ReactiveUI;
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using AgValoniaGPS.Models.Tram;
 
 namespace AgValoniaGPS.Models.Configuration;
 
@@ -22,7 +24,7 @@ namespace AgValoniaGPS.Models.Configuration;
 /// Tram line configuration for controlled traffic farming (CTF).
 /// Tram lines are permanent wheel tracks to reduce soil compaction.
 /// </summary>
-public class TramConfig : ReactiveObject
+public class TramConfig : ObservableObject
 {
     /// <summary>
     /// Width between tram passes in meters (typically 2x or 3x tool width)
@@ -31,7 +33,7 @@ public class TramConfig : ReactiveObject
     public double TramWidth
     {
         get => _tramWidth;
-        set => this.RaiseAndSetIfChanged(ref _tramWidth, value);
+        set => SetProperty(ref _tramWidth, value);
     }
 
     /// <summary>
@@ -41,7 +43,7 @@ public class TramConfig : ReactiveObject
     public int Passes
     {
         get => _passes;
-        set => this.RaiseAndSetIfChanged(ref _passes, System.Math.Max(1, value));
+        set => SetProperty(ref _passes, System.Math.Max(1, value));
     }
 
     /// <summary>
@@ -51,7 +53,7 @@ public class TramConfig : ReactiveObject
     public TramDisplayMode DisplayMode
     {
         get => _displayMode;
-        set => this.RaiseAndSetIfChanged(ref _displayMode, value);
+        set => SetProperty(ref _displayMode, value);
     }
 
     /// <summary>
@@ -61,7 +63,7 @@ public class TramConfig : ReactiveObject
     public double Alpha
     {
         get => _alpha;
-        set => this.RaiseAndSetIfChanged(ref _alpha, System.Math.Clamp(value, 0.0, 1.0));
+        set => SetProperty(ref _alpha, System.Math.Clamp(value, 0.0, 1.0));
     }
 
     /// <summary>
@@ -71,7 +73,7 @@ public class TramConfig : ReactiveObject
     public bool IsOuterInverted
     {
         get => _isOuterInverted;
-        set => this.RaiseAndSetIfChanged(ref _isOuterInverted, value);
+        set => SetProperty(ref _isOuterInverted, value);
     }
 
     /// <summary>
@@ -81,7 +83,7 @@ public class TramConfig : ReactiveObject
     public bool IsEnabled
     {
         get => _isEnabled;
-        set => this.RaiseAndSetIfChanged(ref _isEnabled, value);
+        set => SetProperty(ref _isEnabled, value);
     }
 
     /// <summary>
@@ -91,8 +93,34 @@ public class TramConfig : ReactiveObject
     public int CurrentPass
     {
         get => _currentPass;
-        set => this.RaiseAndSetIfChanged(ref _currentPass, value);
+        set => SetProperty(ref _currentPass, value);
     }
+
+    /// <summary>
+    /// Start pass offset (which pass number to begin tram lines from).
+    /// 0 = start from first pass, 1 = skip first pass, etc.
+    /// </summary>
+    private int _startPass;
+    public int StartPass
+    {
+        get => _startPass;
+        set => SetProperty(ref _startPass, System.Math.Max(0, value));
+    }
+
+    /// <summary>
+    /// Show left/right tram detection indicators on the map display.
+    /// </summary>
+    private bool _isDisplayTramControl = true;
+    public bool IsDisplayTramControl
+    {
+        get => _isDisplayTramControl;
+        set => SetProperty(ref _isDisplayTramControl, value);
+    }
+
+    /// <summary>
+    /// Collection of tram systems. Each system generates its own set of tram lines.
+    /// </summary>
+    public ObservableCollection<TramSystem> Systems { get; } = new();
 }
 
 /// <summary>

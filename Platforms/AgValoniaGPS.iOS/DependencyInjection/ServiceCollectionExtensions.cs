@@ -26,12 +26,14 @@ using AgValoniaGPS.Services.Track;
 using AgValoniaGPS.Services.YouTurn;
 using AgValoniaGPS.Services.Tool;
 using AgValoniaGPS.Services.Coverage;
+using AgValoniaGPS.Services.Pipeline;
 using AgValoniaGPS.Services.Section;
 using AgValoniaGPS.Services.Tram;
 using AgValoniaGPS.ViewModels;
 using AgValoniaGPS.Models;
 using AgValoniaGPS.Models.State;
 using AgValoniaGPS.iOS.Services;
+using AgValoniaGPS.Services.Logging;
 
 namespace AgValoniaGPS.iOS.DependencyInjection;
 
@@ -44,6 +46,7 @@ public static class ServiceCollectionExtensions
         {
             builder.AddConsole();
             builder.AddDebug();
+            builder.AddProvider(new InMemoryLoggerProvider());
             builder.SetMinimumLevel(LogLevel.Debug);
         });
 
@@ -74,6 +77,7 @@ public static class ServiceCollectionExtensions
 
         // Boundary recording service
         services.AddSingleton<IBoundaryRecordingService, BoundaryRecordingService>();
+        services.AddSingleton<IBoundaryBuilderService, BoundaryBuilderService>();
 
         // Headland builder services
         services.AddSingleton<IPolygonOffsetService, PolygonOffsetService>();
@@ -98,6 +102,8 @@ public static class ServiceCollectionExtensions
         // YouTurn services
         services.AddSingleton<YouTurnCreationService>();
         services.AddSingleton<YouTurnGuidanceService>();
+        services.AddSingleton<YouTurnPathingService>();
+        services.AddSingleton<YouTurnStateMachine>();
 
         // Tool position service (for trailing implements)
         services.AddSingleton<IToolPositionService, ToolPositionService>();
@@ -126,6 +132,9 @@ public static class ServiceCollectionExtensions
 
         // Elevation log service (#120)
         services.AddSingleton<IElevationLogService, ElevationLogService>();
+
+        // GPS processing pipeline (background-thread orchestration)
+        services.AddSingleton<IGpsPipelineService, GpsPipelineService>();
 
         // iOS-specific services
         services.AddSingleton<IMapService, MapService>();

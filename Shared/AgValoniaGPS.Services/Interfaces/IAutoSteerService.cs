@@ -168,6 +168,12 @@ public interface IAutoSteerService
     /// Derived from LastSensorData.SensorValue.
     /// </summary>
     double SensorPercent { get; }
+
+    /// <summary>
+    /// Latest vehicle state snapshot for UI/wizard consumption.
+    /// Null if no state has been produced yet.
+    /// </summary>
+    VehicleStateSnapshot? LatestSnapshot { get; }
 }
 
 /// <summary>
@@ -204,6 +210,8 @@ public readonly struct VehicleStateSnapshot
 
     public ushort SectionStates { get; init; }
     public bool MasterSectionOn { get; init; }
+
+    public byte TramState { get; init; }
 
     public double TotalLatencyMs { get; init; }
     public double ParseLatencyMs { get; init; }

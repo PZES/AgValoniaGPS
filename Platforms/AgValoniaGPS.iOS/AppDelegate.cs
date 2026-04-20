@@ -17,7 +17,7 @@
 using System;
 using Avalonia;
 using Avalonia.iOS;
-using Avalonia.ReactiveUI;
+using Avalonia.Skia;
 using Foundation;
 using UIKit;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,11 +34,17 @@ public partial class AppDelegate : AvaloniaAppDelegate<App>
         try
         {
             Console.WriteLine("[AppDelegate] CustomizeAppBuilder starting...");
-            // Explicitly configure for iOS - this ensures no desktop window chrome
+            // Explicitly configure for iOS - this ensures no desktop window chrome.
+            // Skia's default GPU cache is ~28 MB; our coverage bitmap alone is ~50 MB,
+            // so without a bump the texture is re-uploaded every frame (~20+ FPS cost
+            // on iPad). 128 MB comfortably fits coverage + other textures.
             var result = base.CustomizeAppBuilder(builder)
                 .UseiOS()
-                .UseReactiveUI()
-                .LogToTrace();
+                .LogToTrace()
+                .With(new SkiaOptions
+                {
+                    MaxGpuResourceSizeBytes = 128L * 1024 * 1024
+                });
             Console.WriteLine("[AppDelegate] CustomizeAppBuilder completed.");
             return result;
         }
@@ -74,13 +80,9 @@ public partial class AppDelegate : AvaloniaAppDelegate<App>
         {
             if (App.Services == null) return;
 
-            // Save panel positions from MainView
-            if (App.MainView != null)
-            {
-                App.MainView.SavePanelPositions();
-            }
+            // Panels are now anchored — no position save needed
 
-            // Save configuration (includes panel positions)
+            // Save configuration
             var configService = App.Services.GetRequiredService<IConfigurationService>();
             configService.SaveAppSettings();
             Console.WriteLine("[AppDelegate] Saved configuration on app background/terminate");

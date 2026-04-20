@@ -15,11 +15,8 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 using System;
-using System.Linq;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core;
-using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using AgValoniaGPS.iOS.Views;
 using AgValoniaGPS.iOS.DependencyInjection;
@@ -56,6 +53,8 @@ public partial class App : Avalonia.Application
         try
         {
             System.Diagnostics.Debug.WriteLine("[App] OnFrameworkInitializationCompleted starting...");
+
+            AgValoniaGPS.Views.Diagnostics.DiagFlagsBootstrap.ApplyAtStartup(this);
 
             // Build DI container
             System.Diagnostics.Debug.WriteLine("[App] Building DI container...");
@@ -103,8 +102,6 @@ public partial class App : Avalonia.Application
             if (ApplicationLifetime is ISingleViewApplicationLifetime singleViewPlatform)
             {
                 System.Diagnostics.Debug.WriteLine("[App] Creating MainView with ViewModel...");
-                // Avoid duplicate validations from both Avalonia and the CommunityToolkit.
-                DisableAvaloniaDataAnnotationValidation();
 
                 // Get MainViewModel and services from DI and create view with them
                 var viewModel = Services.GetRequiredService<MainViewModel>();
@@ -189,16 +186,4 @@ public partial class App : Avalonia.Application
         }
     }
 
-    private void DisableAvaloniaDataAnnotationValidation()
-    {
-        // Get an array of plugins to remove
-        var dataValidationPluginsToRemove =
-            BindingPlugins.DataValidators.OfType<DataAnnotationsValidationPlugin>().ToArray();
-
-        // remove each entry found
-        foreach (var plugin in dataValidationPluginsToRemove)
-        {
-            BindingPlugins.DataValidators.Remove(plugin);
-        }
-    }
 }

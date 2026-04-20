@@ -41,6 +41,7 @@ public class AutoSteerService : IAutoSteerService
     // Dependencies
     private readonly ITrackGuidanceService _guidanceService;
     private readonly IUdpCommunicationService _udpService;
+    private ITramLineService? _tramLineService;
 
     // Local coordinate system reference
     private LocalPlane? _localPlane;
@@ -82,6 +83,14 @@ public class AutoSteerService : IAutoSteerService
         _guidanceInput = new TrackInput();
     }
 
+    /// <summary>
+    /// Set the tram line service for real-time wheel detection in PGN 239.
+    /// </summary>
+    public void SetTramLineService(ITramLineService tramLineService)
+    {
+        _tramLineService = tramLineService;
+    }
+
     public void Start()
     {
         _isEnabled = true;
@@ -112,6 +121,10 @@ public class AutoSteerService : IAutoSteerService
 
     /// <summary>Sensor reading as percentage (0-100).</summary>
     public double SensorPercent => _sensorPercent;
+
+    /// <inheritdoc/>
+    public VehicleStateSnapshot? LatestSnapshot => _latestSnapshot;
+    private VehicleStateSnapshot? _latestSnapshot;
 
     /// <summary>
     /// Handle incoming UDP data from steering module.
@@ -298,6 +311,15 @@ public class AutoSteerService : IAutoSteerService
             return;
         }
 
+        // Auto-create a temporary local plane from first GPS fix
+        // so the tractor moves on screen without opening a field
+        if (_localPlane == null && _state.FixQuality > 0)
+        {
+            _localPlane = new LocalPlane(
+                new Wgs84(_state.Latitude, _state.Longitude),
+                new SharedFieldProperties());
+        }
+
         // Convert to local coordinates if we have a plane
         if (_localPlane != null)
         {
@@ -363,6 +385,9 @@ public class AutoSteerService : IAutoSteerService
             CalculateGuidance();
         }
 
+        // Detect tram line wheel positions for PGN 239
+        UpdateTramState();
+
         // Build and send PGNs
         SendPgns();
 
@@ -374,6 +399,28 @@ public class AutoSteerService : IAutoSteerService
         NotifyStateUpdated();
 
         _cycleCount++;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void UpdateTramState()
+    {
+        if (_tramLineService != null && _tramLineService.HasTramLines &&
+            ConfigurationStore.Instance.Tram.DisplayMode != Models.Configuration.TramDisplayMode.Off)
+        {
+            // Use approximate tool position so detection matches implement indicators
+            var config = ConfigurationStore.Instance;
+            double hitchLen = config.Tool.HitchLength + config.Tool.TrailingHitchLength;
+            double toolE = _state.Easting + Math.Sin(_state.HeadingRadians) * hitchLen;
+            double toolN = _state.Northing + Math.Cos(_state.HeadingRadians) * hitchLen;
+
+            _state.TramState = _tramLineService.DetectTramWheels(
+                new Models.Base.Vec3(toolE, toolN, _state.Heading),
+                _state.HeadingRadians, 0.5);
+        }
+        else
+        {
+            _state.TramState = 0;
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -422,7 +469,9 @@ public class AutoSteerService : IAutoSteerService
 
     private void NotifyStateUpdated()
     {
-        StateUpdated?.Invoke(this, CreateSnapshot());
+        var snapshot = CreateSnapshot();
+        _latestSnapshot = snapshot;
+        StateUpdated?.Invoke(this, snapshot);
     }
 
     private VehicleStateSnapshot CreateSnapshot()
@@ -451,6 +500,7 @@ public class AutoSteerService : IAutoSteerService
             IsAutoSteerEngaged = _state.IsAutoSteerEngaged,
             SectionStates = _state.SectionStates,
             MasterSectionOn = _state.MasterSectionOn,
+            TramState = _state.TramState,
             TotalLatencyMs = _state.TotalLatencyMs,
             ParseLatencyMs = _state.ParseLatencyMs,
             GuidanceLatencyMs = _state.GuidanceLatencyMs,

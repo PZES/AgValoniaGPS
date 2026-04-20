@@ -26,7 +26,9 @@ using AgValoniaGPS.Models.Configuration;
 using AgValoniaGPS.Services.Logging;
 using Avalonia.Threading;
 using Microsoft.Extensions.Logging;
-using ReactiveUI;
+using CommunityToolkit.Mvvm.Input;
+
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace AgValoniaGPS.ViewModels;
 
@@ -34,28 +36,28 @@ public partial class MainViewModel
 {
     private void InitializeSettingsCommands()
     {
-        ShowAppDirectoriesDialogCommand = ReactiveCommand.Create(() =>
+        ShowAppDirectoriesDialogCommand = new RelayCommand(() =>
         {
             RefreshAppDirectories();
             State.UI.ShowDialog(Models.State.DialogType.AppDirectories);
         });
 
-        CloseAppDirectoriesDialogCommand = ReactiveCommand.Create(() =>
+        CloseAppDirectoriesDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
         });
 
-        ShowAboutDialogCommand = ReactiveCommand.Create(() =>
+        ShowAboutDialogCommand = new RelayCommand(() =>
         {
             State.UI.ShowDialog(Models.State.DialogType.About);
         });
 
-        CloseAboutDialogCommand = ReactiveCommand.Create(() =>
+        CloseAboutDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
         });
 
-        ResetAllSettingsCommand = ReactiveCommand.Create(() =>
+        ResetAllSettingsCommand = new RelayCommand(() =>
         {
             ShowConfirmationDialog(
                 "Reset All Settings",
@@ -70,7 +72,7 @@ public partial class MainViewModel
         });
 
         // Log Viewer (#22)
-        ShowLogViewerDialogCommand = ReactiveCommand.Create(() =>
+        ShowLogViewerDialogCommand = new RelayCommand(() =>
         {
             RefreshLogEntries();
             _logStoreSubscribed = true;
@@ -78,7 +80,7 @@ public partial class MainViewModel
             State.UI.ShowDialog(Models.State.DialogType.LogViewer);
         });
 
-        CloseLogViewerDialogCommand = ReactiveCommand.Create(() =>
+        CloseLogViewerDialogCommand = new RelayCommand(() =>
         {
             if (_logStoreSubscribed)
             {
@@ -88,20 +90,20 @@ public partial class MainViewModel
             State.UI.CloseDialog();
         });
 
-        ClearLogEntriesCommand = ReactiveCommand.Create(() =>
+        ClearLogEntriesCommand = new RelayCommand(() =>
         {
             LogStore.Instance.Clear();
             FilteredLogEntries.Clear();
         });
 
-        SetLogFilterCommand = ReactiveCommand.Create<string>(level =>
+        SetLogFilterCommand = new RelayCommand<string>(level =>
         {
             LogFilterLevel = Enum.TryParse<LogLevel>(level, out var parsed) ? parsed : LogLevel.Debug;
             RefreshLogEntries();
         });
 
         // Flag By Lat/Lon (#23)
-        ShowFlagByLatLonDialogCommand = ReactiveCommand.Create(() =>
+        ShowFlagByLatLonDialogCommand = new RelayCommand(() =>
         {
             FlagLatitudeInput = "";
             FlagLongitudeInput = "";
@@ -109,51 +111,51 @@ public partial class MainViewModel
             State.UI.ShowDialog(Models.State.DialogType.FlagByLatLon);
         });
 
-        CloseFlagByLatLonDialogCommand = ReactiveCommand.Create(() =>
+        CloseFlagByLatLonDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
         });
 
-        PlaceFlagByLatLonCommand = ReactiveCommand.Create(() =>
+        PlaceFlagByLatLonCommand = new RelayCommand(() =>
         {
             PlaceFlagAtLatLon();
         });
 
         // View All Settings (#29)
-        ShowViewSettingsDialogCommand = ReactiveCommand.Create(() =>
+        ShowViewSettingsDialogCommand = new RelayCommand(() =>
         {
             RefreshSettingsTree();
             State.UI.ShowDialog(Models.State.DialogType.ViewSettings);
         });
 
-        CloseViewSettingsDialogCommand = ReactiveCommand.Create(() =>
+        CloseViewSettingsDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
         });
 
         // Help (#16)
-        ShowHelpDialogCommand = ReactiveCommand.Create(() =>
+        ShowHelpDialogCommand = new RelayCommand(() =>
         {
             State.UI.ShowDialog(Models.State.DialogType.Help);
         });
 
-        CloseHelpDialogCommand = ReactiveCommand.Create(() =>
+        CloseHelpDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
         });
 
         // Language Selection (#40)
-        ShowLanguageDialogCommand = ReactiveCommand.Create(() =>
+        ShowLanguageDialogCommand = new RelayCommand(() =>
         {
             State.UI.ShowDialog(Models.State.DialogType.Language);
         });
 
-        CloseLanguageDialogCommand = ReactiveCommand.Create(() =>
+        CloseLanguageDialogCommand = new RelayCommand(() =>
         {
             State.UI.CloseDialog();
         });
 
-        SetLanguageCommand = ReactiveCommand.Create<string>(code =>
+        SetLanguageCommand = new RelayCommand<string>(code =>
         {
             if (string.IsNullOrEmpty(code)) return;
             _settingsService.Settings.Language = code;
@@ -173,12 +175,11 @@ public partial class MainViewModel
             }
             State.UI.CloseDialog();
         });
-        // Debug Dump (#127)
-        CreateDebugDumpCommand = ReactiveCommand.Create(() =>
+        // Debug Dump (#127) - silent dump for integration tests
+        CreateDebugDumpCommand = new RelayCommand(() =>
         {
             try
             {
-                // Capture screenshot before creating dump (runs on UI thread)
                 byte[]? screenshot = null;
                 try { screenshot = ScreenshotProvider?.Invoke(); }
                 catch { /* screenshot is optional */ }
@@ -195,24 +196,113 @@ public partial class MainViewModel
             }
         });
 
+        // Bug Report Dialog (#249)
+        ShowBugReportDialogCommand = new RelayCommand(() =>
+        {
+            // Capture screenshot BEFORE dialog opens (so it shows the actual state)
+            _bugReportScreenshot = null;
+            try { _bugReportScreenshot = ScreenshotProvider?.Invoke(); }
+            catch { /* screenshot is optional */ }
+
+            BugReportTitle = string.Empty;
+            BugReportDescription = string.Empty;
+            BugReportAttachments.Clear();
+            State.UI.ShowDialog(Models.State.DialogType.BugReport);
+        });
+
+        CloseBugReportDialogCommand = new RelayCommand(() =>
+        {
+            _bugReportScreenshot = null;
+            BugReportAttachments.Clear();
+            State.UI.CloseDialog();
+        });
+
+        RemoveBugReportAttachmentCommand = new RelayCommand<BugReportAttachment>(attachment =>
+        {
+            if (attachment != null)
+                BugReportAttachments.Remove(attachment);
+        });
+
+        SubmitBugReportCommand = new AsyncRelayCommand(async () =>
+        {
+            try
+            {
+                State.UI.CloseDialog();
+                State.UI.BusyMessage = "Creating bug report...";
+                State.UI.IsBusy = true;
+
+                // Force UI to render busy overlay
+                await Dispatcher.UIThread.InvokeAsync(() => { }, Avalonia.Threading.DispatcherPriority.Render);
+                await System.Threading.Tasks.Task.Delay(50);
+
+                var bugReportsDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "AgValoniaGPS", "BugReports");
+
+                // Build filename from title: sanitize, replace spaces with hyphens
+                var titleSlug = string.IsNullOrWhiteSpace(BugReportTitle)
+                    ? "untitled"
+                    : string.Join("-", BugReportTitle.Trim().Split(
+                        Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries))
+                        .Replace(' ', '-').ToLowerInvariant();
+                if (titleSlug.Length > 60) titleSlug = titleSlug[..60];
+
+                var attachmentPaths = BugReportAttachments.Count > 0
+                    ? BugReportAttachments.Select(a => a.FilePath).ToList()
+                    : null;
+
+                // Combine title + description for the notes file
+                var notes = string.IsNullOrWhiteSpace(BugReportTitle)
+                    ? BugReportDescription
+                    : $"# {BugReportTitle}\n\n{BugReportDescription}";
+
+                var zipPath = Services.DebugDumpService.CreateDump(
+                    _settingsService,
+                    _appState,
+                    additionalNotes: notes,
+                    screenshotPng: _bugReportScreenshot,
+                    outputDirectory: bugReportsDir,
+                    filePrefix: $"bugreport_{titleSlug}",
+                    userAttachments: attachmentPaths);
+
+                _bugReportScreenshot = null;
+                BugReportAttachments.Clear();
+
+                _logger.LogInformation("Bug report created: {ZipPath}", zipPath);
+                ShowConfirmationDialog(
+                    "Bug Report Saved",
+                    $"Your bug report has been saved to:\n\n{zipPath}\n\nAttach this file to a GitHub issue.",
+                    () => { });
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Bug report failed: {ex.Message}";
+                _logger.LogError(ex, "Bug report creation failed");
+            }
+            finally
+            {
+                State.UI.IsBusy = false;
+            }
+        });
+
         // Offset Fix (#36) - GPS drift compensation
         const double OFFSET_STEP = 0.01; // 1cm per click
 
-        ShowOffsetFixDialogCommand = ReactiveCommand.Create(() =>
+        ShowOffsetFixDialogCommand = new RelayCommand(() =>
         {
             State.UI.IsOffsetFixPanelVisible = !State.UI.IsOffsetFixPanelVisible;
         });
 
-        CloseOffsetFixDialogCommand = ReactiveCommand.Create(() =>
+        CloseOffsetFixDialogCommand = new RelayCommand(() =>
         {
             State.UI.IsOffsetFixPanelVisible = false;
         });
 
-        OffsetFixNorthCommand = ReactiveCommand.Create(() => ApplyDrift(0, OFFSET_STEP));
-        OffsetFixSouthCommand = ReactiveCommand.Create(() => ApplyDrift(0, -OFFSET_STEP));
-        OffsetFixEastCommand = ReactiveCommand.Create(() => ApplyDrift(OFFSET_STEP, 0));
-        OffsetFixWestCommand = ReactiveCommand.Create(() => ApplyDrift(-OFFSET_STEP, 0));
-        OffsetFixZeroCommand = ReactiveCommand.Create(() =>
+        OffsetFixNorthCommand = new RelayCommand(() => ApplyDrift(0, OFFSET_STEP));
+        OffsetFixSouthCommand = new RelayCommand(() => ApplyDrift(0, -OFFSET_STEP));
+        OffsetFixEastCommand = new RelayCommand(() => ApplyDrift(OFFSET_STEP, 0));
+        OffsetFixWestCommand = new RelayCommand(() => ApplyDrift(-OFFSET_STEP, 0));
+        OffsetFixZeroCommand = new RelayCommand(() =>
         {
             State.Field.DriftEasting = 0;
             State.Field.DriftNorthing = 0;
@@ -220,10 +310,50 @@ public partial class MainViewModel
             double headingRad = Heading * Math.PI / 180.0;
             _toolPositionService.ResetTrailingState(
                 new Models.Base.Vec3(Easting, Northing, headingRad), headingRad);
+            SyncGuidanceStateToPipeline();
         });
     }
 
     public ICommand? CreateDebugDumpCommand { get; private set; }
+    public ICommand? ShowBugReportDialogCommand { get; private set; }
+    public ICommand? CloseBugReportDialogCommand { get; private set; }
+    public ICommand? SubmitBugReportCommand { get; private set; }
+    public ICommand? RemoveBugReportAttachmentCommand { get; private set; }
+
+    private byte[]? _bugReportScreenshot;
+
+    private string _bugReportTitle = string.Empty;
+    public string BugReportTitle
+    {
+        get => _bugReportTitle;
+        set { _bugReportTitle = value; OnPropertyChanged(); }
+    }
+
+    private string _bugReportDescription = string.Empty;
+    public string BugReportDescription
+    {
+        get => _bugReportDescription;
+        set { _bugReportDescription = value; OnPropertyChanged(); }
+    }
+
+    public ObservableCollection<BugReportAttachment> BugReportAttachments { get; } = new();
+
+    public void AddBugReportAttachment(string filePath)
+    {
+        if (!File.Exists(filePath)) return;
+        // Avoid duplicates
+        if (BugReportAttachments.Any(a => a.FilePath == filePath)) return;
+        var info = new FileInfo(filePath);
+        BugReportAttachments.Add(new BugReportAttachment(
+            info.Name, filePath, FormatFileSize(info.Length)));
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
 
     private void ApplyDrift(double deltaEasting, double deltaNorthing)
     {
@@ -239,6 +369,7 @@ public partial class MainViewModel
             Northing + deltaNorthing,
             headingRad);
         _toolPositionService.ResetTrailingState(driftedPos, headingRad);
+        SyncGuidanceStateToPipeline();
     }
 
     private void RefreshAppDirectories()
@@ -264,7 +395,7 @@ public partial class MainViewModel
     public LogLevel LogFilterLevel
     {
         get => _logFilterLevel;
-        set => this.RaiseAndSetIfChanged(ref _logFilterLevel, value);
+        set => SetProperty(ref _logFilterLevel, value);
     }
 
     public ObservableCollection<LogEntry> FilteredLogEntries { get; } = new();
@@ -307,21 +438,21 @@ public partial class MainViewModel
     public string FlagLatitudeInput
     {
         get => _flagLatitudeInput;
-        set => this.RaiseAndSetIfChanged(ref _flagLatitudeInput, value);
+        set => SetProperty(ref _flagLatitudeInput, value);
     }
 
     private string _flagLongitudeInput = "";
     public string FlagLongitudeInput
     {
         get => _flagLongitudeInput;
-        set => this.RaiseAndSetIfChanged(ref _flagLongitudeInput, value);
+        set => SetProperty(ref _flagLongitudeInput, value);
     }
 
     private string _flagByLatLonError = "";
     public string FlagByLatLonError
     {
         get => _flagByLatLonError;
-        set => this.RaiseAndSetIfChanged(ref _flagByLatLonError, value);
+        set => SetProperty(ref _flagByLatLonError, value);
     }
 
     private void PlaceFlagAtLatLon()
@@ -468,3 +599,5 @@ public class AppDirectoryInfo
         Exists = Directory.Exists(path);
     }
 }
+
+public record BugReportAttachment(string FileName, string FilePath, string FileSize);

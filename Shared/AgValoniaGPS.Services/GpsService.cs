@@ -17,6 +17,7 @@
 using System;
 using AgValoniaGPS.Models;
 using AgValoniaGPS.Models.Configuration;
+using AgValoniaGPS.Models.Timing;
 using AgValoniaGPS.Services.Interfaces;
 
 namespace AgValoniaGPS.Services;
@@ -67,7 +68,7 @@ public class GpsService : IGpsService
         TransformAntennaToPivot(newData);
 
         CurrentData = newData;
-        _lastGpsDataReceived = DateTime.Now;
+        _lastGpsDataReceived = Clock.Current.Now;
         IsConnected = newData.IsValid;
         GpsDataUpdated?.Invoke(this, CurrentData);
     }
@@ -144,15 +145,21 @@ public class GpsService : IGpsService
     /// </summary>
     public void UpdateImuData()
     {
-        _lastImuDataReceived = DateTime.Now;
+        _lastImuDataReceived = Clock.Current.Now;
     }
 
     /// <summary>
     /// Check if GPS data is flowing (10Hz expected)
     /// </summary>
+    public void MarkGpsReceived()
+    {
+        _lastGpsDataReceived = Clock.Current.Now;
+        IsConnected = true;
+    }
+
     public bool IsGpsDataOk()
     {
-        bool ok = (DateTime.Now - _lastGpsDataReceived).TotalMilliseconds < GPS_TIMEOUT_MS;
+        bool ok = (Clock.Current.Now - _lastGpsDataReceived).TotalMilliseconds < GPS_TIMEOUT_MS;
 
         if (!ok && IsConnected)
         {
@@ -167,6 +174,6 @@ public class GpsService : IGpsService
     /// </summary>
     public bool IsImuDataOk()
     {
-        return (DateTime.Now - _lastImuDataReceived).TotalMilliseconds < IMU_TIMEOUT_MS;
+        return (Clock.Current.Now - _lastImuDataReceived).TotalMilliseconds < IMU_TIMEOUT_MS;
     }
 }

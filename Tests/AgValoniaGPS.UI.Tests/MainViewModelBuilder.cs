@@ -45,11 +45,21 @@ public class MainViewModelBuilder
             settingsService: SettingsService,
             mapService: Substitute.For<IMapService>(),
             boundaryRecordingService: Substitute.For<IBoundaryRecordingService>(),
+            boundaryBuilderService: Substitute.For<IBoundaryBuilderService>(),
             boundaryFileService: new BoundaryFileService(),
             headlandBuilderService: Substitute.For<AgValoniaGPS.Services.Headland.IHeadlandBuilderService>(),
             trackGuidanceService: Substitute.For<ITrackGuidanceService>(),
-            youTurnCreationService: new YouTurnCreationService(NullLogger<YouTurnCreationService>.Instance),
+            youTurnCreationService: new YouTurnCreationService(
+                NullLogger<YouTurnCreationService>.Instance,
+                Substitute.For<AgValoniaGPS.Services.Geometry.IPolygonOffsetService>()),
             youTurnGuidanceService: new YouTurnGuidanceService(),
+            youTurnPathingService: new YouTurnPathingService(NullLogger<YouTurnPathingService>.Instance),
+            youTurnStateMachine: new YouTurnStateMachine(
+                new YouTurnCreationService(
+                    NullLogger<YouTurnCreationService>.Instance,
+                    Substitute.For<AgValoniaGPS.Services.Geometry.IPolygonOffsetService>()),
+                new YouTurnPathingService(NullLogger<YouTurnPathingService>.Instance),
+                NullLogger<YouTurnStateMachine>.Instance),
             polygonOffsetService: Substitute.For<AgValoniaGPS.Services.Geometry.IPolygonOffsetService>(),
             turnAreaService: Substitute.For<AgValoniaGPS.Services.Interfaces.ITurnAreaService>(),
             vehicleProfileService: VehicleProfileService,
@@ -63,6 +73,8 @@ public class MainViewModelBuilder
             chartDataService: Substitute.For<IChartDataService>(),
             audioService: Substitute.For<IAudioService>(),
             elevationLogService: Substitute.For<IElevationLogService>(),
+            tramLineService: Substitute.For<ITramLineService>(),
+            gpsPipelineService: Substitute.For<IGpsPipelineService>(),
             logger: NullLogger<MainViewModel>.Instance,
             appState: new ApplicationState());
     }
